@@ -1,0 +1,32 @@
+# Local configuration and all runtime/user data
+/config.json
+/state/
+/data/
+/remote-desktop/connection.json
+*.env
+.env*
+!*.env.example
+# Build output, toolchains, caches and signing material
+/build/
+/dist/
+/tools/
+__pycache__/
+*.py[cod]
+*.class
+*.jar
+*.apk
+*.apk.idsig
+*.ap_
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.pass
+*.key
+*.pem
+*.log
+*.tar.gz
+*.zip
+.DS_Store
+.idea/
+.vscode/

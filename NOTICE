@@ -1,0 +1,15 @@
+Pi Console
+Copyright 2026 Pi Console contributors
+
+This product includes Apache Guacamole JavaScript components developed by
+The Apache Software Foundation (https://www.apache.org/).
+See third_party/guacamole-NOTICE.txt and THIRD_PARTY_NOTICES.md.
+
+Pi Console is an independent project. No trademark rights or affiliation
+with hardware vendors are granted by this project's Apache-2.0 license.
+
+The raspberry-shaped terminal icon in
+android/res/drawable-nodpi/pi_console_mark.png is excluded from this
+project's Apache-2.0 grant. Third-party branding rights have not been
+cleared. Raspberry Pi is a trademark of Raspberry Pi Ltd.
+See docs/commercial-use.md before public or commercial distribution.

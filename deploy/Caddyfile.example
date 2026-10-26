@@ -1,0 +1,14 @@
+# Replace the example hostname. Merge this site into your own configuration.
+# This file is never applied automatically by the installer.
+# This example allows only Tailscale and loopback source addresses.
+# For LAN/public HTTPS, explicitly adapt this allowlist and your access/rate policy.
+# The Android app itself does not require Tailscale.
+console.example.test {
+    @outside_private_network not remote_ip 100.64.0.0/10 fd7a:115c:a1e0::/48 127.0.0.1 ::1
+    respond @outside_private_network 403
+
+    handle_path /pi-console/* {
+        reverse_proxy 127.0.0.1:18765
+    }
+    respond 404
+}

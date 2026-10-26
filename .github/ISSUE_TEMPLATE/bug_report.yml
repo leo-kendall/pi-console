@@ -1,0 +1,27 @@
+name: Bug report / 问题反馈
+description: Report a reproducible problem without private data.
+body:
+  - type: input
+    id: version
+    attributes:
+      label: App and backend version
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Android/WebView version, Linux distribution and optional desktop setup. Do not include private addresses or passwords.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps, expected behavior and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Remove tokens, pairing codes, process command lines, desktop passwords, signing files and private screenshots. Use the private security reporting channel for suspected vulnerabilities.

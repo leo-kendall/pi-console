@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Development-only simulated UI fixture. Never connects to a real host."""
+from pathlib import Path
+import http.server,json,time
+ROOT=Path(__file__).resolve().parents[1]/'android/assets'
+SHIM=r'''window.testConnection={url:'',paired:false};window.testRequests=[];window.testResources=[];window.testResourceError=false;window.testPrepareCount=0;window.testEndCount=0;window.testDiscovery={supported:true,partial:false,sources:[]};window.Pi={local:(id,action,value)=>{let data={};if(action==='serverSettings')data={...testConnection};else if(action==='saveServer'){testConnection.url=value;data={url:value};}else if(action==='apps')data={apps:[]};else if(action==='monitorState')data={available:false,running:false,requested:false,notifications:false};else if(action==='transferState')data={busy:false};nativeResult(id,data,null);},request:(id,method,path,body)=>{testRequests.push(path);let data={},now=Date.now()/1000;if(path==='/api/pair'){testConnection.paired=true;data={paired:true};}else if(path==='/api/status')data={name:'Demo server',sampled_at:new Date().toISOString(),metrics:{cpu_temperature_c:{status:'ok',value:42},load_1_5_15:{status:'ok',value:[.2,.3,.4]},memory_bytes:{status:'ok',value:{total:8589934592,available:5368709120}},disk_bytes:{status:'ok',value:{total:100000000000,used:30000000000}},uptime_seconds:{status:'ok',value:900}}};else if(path.startsWith('/api/history'))data={points:[0,1,2].map(n=>({time:now-6+n*3,temperature:40+n,cpu:10,memory:30,network:{eth0:{rx:100,tx:50}},disks:[{path:'/',used:30,total:100}]}))};else if(path==='/api/resources'&&testResourceError){nativeResult(id,null,'Simulated other server failure');return;}else if(path==='/api/resources')data={resources:testResources,discovery:testDiscovery,sampled_at:Date.now()/1000};else if(path==='/api/resources/prepare-end'){testPrepareCount++;data={ready:true,name:'New container',target:'new-container',mode:'container-stop',description:'Stop this test container once',ticket:'simulated-ticket-'+testPrepareCount};}else if(path==='/api/resources/end'){testEndCount++;testResources=testResources.map(r=>({...r,state:'exited',can_authorize_end:false,end_reason:'Not running'}));data={id:'end-test',state:'success',message:'Stopped'};}else if(path==='/api/actions/end-test')data={id:'end-test',state:'success',message:'Stopped'};else if(path==='/api/alerts')data={rules:{temperature:75,memory:90,disk:90,watch:[]},active:[],events:[],available_watches:[]};else if(path==='/api/storage/roots')data={roots:[{id:'home',path:'/home/demo'},{id:'media',path:'/mnt/media'}]};else if(path.startsWith('/api/storage/scan'))data={items:[],complete:true};nativeResult(id,data,null);}};window.addEventListener('load',()=>resumeApp());'''
+class Handler(http.server.BaseHTTPRequestHandler):
+ def log_message(self,*args):pass
+ def do_GET(self):
+  name=self.path.lstrip('/') or 'index.html'
+  if name=='shim.js':body=SHIM.encode();mime='text/javascript'
+  elif name in [p.name for p in ROOT.iterdir() if p.is_file()]:
+   body=(ROOT/name).read_bytes();mime='text/html' if name.endswith('.html') else 'text/css' if name.endswith('.css') else 'text/javascript'
+   if name=='index.html':body=body.replace(b'<script src="guacamole.js">',b'<script src="shim.js"></script><script src="guacamole.js">')
+  else:self.send_error(404);return
+  self.send_response(200);self.send_header('Content-Type',mime+'; charset=utf-8');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
+print('Public UI test preview on loopback 18777',flush=True)
+http.server.ThreadingHTTPServer(('127.0.0.1',18777),Handler).serve_forever()

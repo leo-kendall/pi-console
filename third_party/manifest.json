@@ -1,0 +1,20 @@
+{
+  "components": [
+    {
+      "name": "Apache Guacamole common-js",
+      "version": "1.6.0",
+      "path": "android/assets/guacamole.js",
+      "sha256": "1fb9dfe4372f1745bb268d66ff4867084249cf3f9bc599f6e6311f2608094fa9",
+      "license": "Apache-2.0",
+      "upstream": "https://github.com/apache/guacamole-client/tree/1.6.0",
+      "notice": "third_party/guacamole-NOTICE.txt"
+    }
+  ],
+  "branding": {
+    "path": "android/res/drawable-nodpi/pi_console_mark.png",
+    "sha256": "fa7d5dd3e7f59bcd9811a01786ea0ae748e9eefcf8bbabd7e1441a62fc73b51c",
+    "origin": "Unchanged padded icon from the earlier private build; raspberry-shaped terminal design based on Raspberry Pi logo direction",
+    "license": "Excluded from project Apache-2.0 grant; third-party branding rights not cleared",
+    "notice": "THIRD_PARTY_NOTICES.md"
+  }
+}

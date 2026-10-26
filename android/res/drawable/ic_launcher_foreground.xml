@@ -1,0 +1,2 @@
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/pi_console_mark" android:gravity="fill" android:filter="true" />

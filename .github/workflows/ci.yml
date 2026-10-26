@@ -1,0 +1,49 @@
+name: Checks and Android development build
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Python regressions
+        run: |
+          python3 -B -m unittest discover -s tests -p 'test_*.py'
+          python3 -B -m unittest discover -s remote-desktop -p 'test_*.py'
+      - name: Java and JavaScript regressions
+        run: |
+          python3 -B scripts/test_java.py
+          node tests/test_app_state.cjs
+          node tests/test_desktop_layout.cjs
+          node tests/test_desktop_diagnostics.cjs
+          node tests/test_desktop_edge_probe.cjs
+          for file in android/assets/*.js; do node --check "$file"; done
+      - name: Check publishable source set
+        run: python3 -B scripts/check_release.py
+  android:
+    needs: tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Ensure Android SDK components
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build development APK
+        run: python3 -B scripts/build_android.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pi-console-development-apk
+          path: build/pi-console-debug.apk
+          retention-days: 7
+          if-no-files-found: error

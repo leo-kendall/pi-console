@@ -163,7 +163,24 @@ class Handler(socketserver.StreamRequestHandler):
             else:
                 auth = headers.get(b"authorization", b"").decode("ascii")
                 owner = CONTROL.authenticate(auth[7:] if auth.startswith("Bearer ") else "")
-                if method=="GET" and path=="/api/setup":result=setup_report(ROOT,SETTINGS['resources'],helper_ready())
+                CONTROL.enforce_roles=True
+                CONTROL.authorize_route(owner,method,target.path)
+                if method=='GET' and path=='/api/session':result=CONTROL.session(owner)
+                elif method=='GET' and path=='/api/devices':result=CONTROL.devices(owner)
+                elif method=='POST' and path=='/api/devices/rename':
+                    if set(data)!={'device','name'}:raise ApiError('无效设备请求')
+                    result=CONTROL.update_device(owner,data['device'],name=data['name'])
+                elif method=='POST' and path=='/api/devices/role':
+                    if set(data)!={'device','role'}:raise ApiError('无效设备请求')
+                    result=CONTROL.update_device(owner,data['device'],role=data['role'])
+                elif method=='POST' and path=='/api/devices/revoke':
+                    if set(data)!={'device'}:raise ApiError('无效设备请求')
+                    CONTROL.revoke_device(owner,data['device']);DESKTOP.revoke(data['device']);result={'ok':True}
+                elif method=='POST' and path=='/api/devices/pair-code':
+                    if set(data)!={'role'}:raise ApiError('无效设备请求')
+                    result={'code':CONTROL.new_code(data['role']),'expires_seconds':600,'role':data['role']}
+                elif method=='GET' and path=='/api/audit':result=CONTROL.audit(owner)
+                elif method=="GET" and path=="/api/setup":result=setup_report(ROOT,SETTINGS['resources'],helper_ready())
                 elif method=="GET" and target.path=="/api/status":result=json.loads(CACHE.get())
                 elif method=="GET" and target.path=="/api/history":result=TELEMETRY.history(parse_qs(target.query).get("window",["5m"])[0])
                 elif method=="GET" and path=="/api/storage/roots":result={"roots":[{"id":k,"path":str(v)} for k,v in STORAGE.roots.items()]}

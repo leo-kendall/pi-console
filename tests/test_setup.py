@@ -34,6 +34,16 @@ class SetupApiTests(unittest.TestCase):
   self.assertEqual(self.request('/api/setup','POST',token)[0],404)
   self.assertEqual(self.request('/api/connection','POST',token)[0],404)
   self.assertEqual(self.calls,[])
+ def test_view_only_device_cannot_bypass_permissions_using_direct_http(self):
+  admin=self.control.pair(self.control.new_code('admin'));viewer=self.control.pair(self.control.new_code('viewer'))
+  self.assertEqual(self.request('/api/session',token=viewer['token'])[1]['role'],'viewer')
+  self.assertEqual(self.request('/api/setup',token=viewer['token'])[0],200)
+  self.assertEqual(self.request('/api/devices',token=viewer['token'])[0],403)
+  for path in ['/api/actions','/api/files/upload/start','/api/processes/terminate','/api/alerts/rules','/api/grants/set','/api/devices/pair-code','/api/desktop/open']:
+   self.assertEqual(self.request(path,'POST',viewer['token'])[0],403,path)
+  self.assertEqual(self.calls,[])
+  self.control.revoke_device(admin['device'],viewer['device'])
+  self.assertEqual(self.request('/api/setup',token=viewer['token'])[0],401)
 
 
 class SetupReportTests(unittest.TestCase):

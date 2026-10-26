@@ -16,6 +16,7 @@ class ApiError(Exception):
 
 def digest(s):return hashlib.sha256(s.encode()).hexdigest()
 from local_state import save
+from permissions import LEVELS,route_role,valid_name
 
 def execute(args):
  # File-backed bounded reader prevents arbitrary log output consuming memory.
@@ -51,6 +52,7 @@ class Control:
  def __init__(self,root=ROOT/'state/control',runner=execute,recover=True,inventory_runner=run_inventory):
   self.root=Path(root);self.root.mkdir(mode=0o700,parents=True,exist_ok=True)
   self.lock=threading.RLock();self.runner=runner;self.inventory_runner=inventory_runner;self.attempts=deque();self.action_times={};self.busy=set()
+  self.enforce_roles=False
   self.auth=self.read('auth.json',{'devices':{},'pair':None})
   self.operations=self.read('actions.json',{})
   if recover:
@@ -63,11 +65,12 @@ class Control:
   return default
  def persist_ops(self):save(self.root/'actions.json',self.operations)
  @locked_auth
- def new_code(self):
+ def new_code(self,role='admin'):
   with self.lock:
+   if role not in LEVELS:raise ApiError('无效设备权限')
    # CLI shares state with running server; readers reload auth under lock.
    self.auth=self.read('auth.json',self.auth);code=secrets.token_hex(4).upper()
-   self.auth['pair']={'hash':digest(code),'expires':time.time()+600}
+   self.auth['pair']={'hash':digest(code),'expires':time.time()+600,'role':role}
    save(self.root/'auth.json',self.auth);return code
  @locked_auth
  def pair(self,code):
@@ -79,7 +82,7 @@ class Control:
    if not isinstance(code,str) or len(code)>32 or not p or p['expires']<now or not secrets.compare_digest(p['hash'],digest(code.strip().upper())):raise ApiError('配对码无效或已过期',401)
    if len(self.auth['devices'])>=16:raise ApiError('设备数量已达上限，请先撤销旧设备')
    token=secrets.token_urlsafe(32);owner=secrets.token_hex(12)
-   self.auth['devices'][digest(token)]={'id':owner,'created':now};self.auth['pair']=None
+   self.auth['devices'][digest(token)]={'id':owner,'created':now,'last_seen':now,'name':'设备 '+owner[:6],'role':p.get('role','admin')};self.auth['pair']=None
    save(self.root/'auth.json',self.auth);return {'token':token,'device':owner}
  @locked_auth
  def authenticate(self,token):
@@ -88,7 +91,57 @@ class Control:
    if not isinstance(token,str) or len(token)>256:raise ApiError('请先配对设备',401)
    data=self.auth['devices'].get(digest(token))
    if not data:raise ApiError('请先配对设备',401)
+   if time.time()-data.get('last_seen',0)>=60:
+    data['last_seen']=time.time();save(self.root/'auth.json',self.auth)
    return data['id']
+ def _owner(self,owner):
+  item=next((v for v in self.auth['devices'].values() if v['id']==owner),None)
+  if item is None:raise ApiError('设备配对已撤销',401)
+  return item
+ def _require(self,owner,role):
+  item=self._owner(owner)
+  if LEVELS.get(item.get('role','admin'),-1)<LEVELS[role]:raise ApiError('此设备权限不足，需要'+{'viewer':'查看','operator':'操作','admin':'管理员'}[role]+'权限',403)
+  return item
+ @locked_auth
+ def require(self,owner,role='operator'):
+  self.auth=self.read('auth.json',self.auth);self._require(owner,role)
+ def authorize_route(self,owner,method,path):self.require(owner,route_role(method,path))
+ def _public_device(self,item,current):
+  return {key:item.get(key,default) for key,default in [('id',''),('name','未命名设备'),('role','admin'),('created',0),('last_seen',item.get('created',0))]}|{'current':item['id']==current}
+ @locked_auth
+ def session(self,owner):
+  self.auth=self.read('auth.json',self.auth);item=self._require(owner,'viewer');role=item.get('role','admin')
+  return self._public_device(item,owner)|{'permissions':[k for k,n in LEVELS.items() if n<=LEVELS.get(role,-1)]}
+ @locked_auth
+ def devices(self,owner):
+  self.auth=self.read('auth.json',self.auth);self._require(owner,'admin')
+  return {'devices':[self._public_device(v,owner) for v in self.auth['devices'].values()]}
+ def _audit(self,owner,action,target):
+  events=self.read('events.json',[])
+  events.append({'time':time.time(),'device':owner,'action':action,'target':str(target)[:128]})
+  save(self.root/'events.json',events[-256:])
+ @locked_auth
+ def audit(self,owner):
+  self.auth=self.read('auth.json',self.auth);self._require(owner,'admin');return {'events':self.read('events.json',[])[-256:]}
+ @locked_auth
+ def update_device(self,owner,target,name=None,role=None):
+  self.auth=self.read('auth.json',self.auth);self._require(owner,'viewer')
+  if owner!=target or role is not None:self._require(owner,'admin')
+  item=self._owner(target)
+  if name is not None:
+   if not valid_name(name):raise ApiError('设备名称应为 1 至 64 个可见字符')
+   item['name']=name
+  if role is not None:
+   if role not in LEVELS:raise ApiError('无效设备权限')
+   if item.get('role','admin')=='admin' and role!='admin' and sum(v.get('role','admin')=='admin' for v in self.auth['devices'].values())<=1:raise ApiError('至少保留一台管理员设备',409)
+   item['role']=role
+  save(self.root/'auth.json',self.auth);self._audit(owner,'device-role' if role is not None else 'device-rename',target)
+  return self._public_device(item,owner)
+ @locked_auth
+ def revoke_device(self,owner,target):
+  self.auth=self.read('auth.json',self.auth);self._require(owner,'admin');self._owner(target)
+  if owner==target:raise ApiError('撤销当前设备请使用“撤销这台手机”')
+  self.auth['devices']={k:v for k,v in self.auth['devices'].items() if v['id']!=target};save(self.root/'auth.json',self.auth);self._audit(owner,'device-revoke',target)
  @locked_auth
  def revoke(self,owner):
   with self.lock:
@@ -156,7 +209,9 @@ class Control:
    threading.Thread(target=self.perform,args=(oid,execute_job),daemon=True).start();return dict(op)
  def perform(self,oid,execute_job):
   with self.lock:op=self.operations[oid];op['state']='running';op['message']='执行中';self.persist_ops()
-  try:execute_job();state='success';message='操作完成，请查看最新状态'
+  try:
+   if self.enforce_roles:self.require(op['owner'],'operator')
+   execute_job();state='success';message='操作完成，请查看最新状态'
   except Exception as e:state='uncertain';message=str(e) if isinstance(e,ApiError) else '执行异常，请刷新状态核实'
   with self.lock:op.update(state=state,message=message,updated=time.time());self.busy.discard(op['resource']);self.persist_ops()
  def operation(self,owner,oid):

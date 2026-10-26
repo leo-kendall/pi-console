@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Numeric-only in-memory history; no simulated samples."""
 from collections import deque
-import threading,time,os
+import threading,time,os,copy
 from config import SETTINGS
 class Telemetry:
  def __init__(self):self.lock=threading.Lock();self.points=deque(maxlen=1201);self.previous=None
@@ -18,7 +18,7 @@ class Telemetry:
    except OSError:pass
    if self.previous:
     pt,pc,pi,pn=self.previous;dt=now-pt;delta=total-pc
-    if delta>0:point['cpu']=max(0,min(100,100*(1-(idle-pi)/delta)))
+    if 0<dt<15 and delta>0 and 0<=idle-pi<=delta:point['cpu']=100*(1-(idle-pi)/delta)
     if 0<dt<15:
      for name,(rx,tx) in net.items():
       if name in pn and rx>=pn[name][0] and tx>=pn[name][1]:point['network'][name]={'rx':(rx-pn[name][0])/dt,'tx':(tx-pn[name][1])/dt}
@@ -31,7 +31,7 @@ class Telemetry:
  def history(self,window):
   if window not in ('5m','15m','60m'):raise ValueError('window')
   cutoff=time.time()-int(window[:-1])*60
-  with self.lock:return {'points':[p for p in self.points if p['time']>=cutoff]}
+  with self.lock:return {'points':copy.deepcopy([p for p in self.points if p['time']>=cutoff]),'interval_seconds':3,'retention_seconds':3600}
  def start(self):
   def loop():
    while True:

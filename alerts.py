@@ -4,9 +4,12 @@ import math,secrets,threading,time
 from pathlib import Path
 from control import ApiError,save,RESOURCES
 from config import SETTINGS
-DEFAULT={'temperature':75,'memory':90,'disk':90,'watch':[]}
+DEFAULT={'temperature':75,'memory':90,'disk':90,'watch':[],'debounce_samples':3,'recovery_samples':2}
+LEGACY_FIELDS={'temperature','memory','disk','watch'}
 def rules_valid(rules):
- if not isinstance(rules,dict) or set(rules)!=set(DEFAULT):raise ApiError('告警配置字段无效')
+ if not isinstance(rules,dict) or not LEGACY_FIELDS<=set(rules) or not set(rules)<=set(DEFAULT):raise ApiError('告警配置字段无效')
+ for k in ('debounce_samples','recovery_samples'):
+  if k in rules and (type(rules[k])!=int or not 1<=rules[k]<=20):raise ApiError('连续采样次数应为 1 至 20')
  for k,lo,hi in [('temperature',45,95),('memory',50,99),('disk',50,99)]:
   if type(rules[k]) not in (int,float) or not math.isfinite(rules[k]) or not lo<=rules[k]<=hi:raise ApiError('告警阈值超出允许范围')
  if not isinstance(rules['watch'],list) or len(rules['watch'])>32 or any(k not in RESOURCES for k in rules['watch']) or len(set(rules['watch']))!=len(rules['watch']):raise ApiError('告警对象不在允许范围')
@@ -16,6 +19,7 @@ class Alerts:
   import json
   self.path=Path(path);self.lock=threading.RLock();self.counters={}
   self.data=json.loads(self.path.read_text()) if self.path.exists() else {'rules':dict(DEFAULT),'active':{},'events':[],'sampled_at':None}
+  self.data['rules']={**DEFAULT,**self.data['rules']}
   self.data['expected_disks']=list(expected_disks) if expected_disks is not None else list(SETTINGS['disks'])
   self.data['rules']['watch']=[key for key in self.data['rules']['watch'] if key in RESOURCES]
   for key in list(self.data['active']):
@@ -26,8 +30,8 @@ class Alerts:
  def snapshot(self):
   import copy
   with self.lock:return copy.deepcopy(dict(rules=self.data['rules'],active=list(self.data['active'].values()),events=self.data['events'][-128:],sampled_at=self.data['sampled_at'],services_sampled_at=self.data.get('services_sampled_at'),available_watches=[{'id':k,'name':v[0]} for k,v in RESOURCES.items()]))
- def event(self,key,title,message,state,now):
-  event=dict(id=secrets.token_hex(12),key=key,title=title,message=message,state=state,time=now)
+ def event(self,key,title,message,state,now,recovered=False):
+  event=dict(id=secrets.token_hex(12),key=key,title=title,message=message,state=state,time=now,recovered=bool(recovered))
   self.data['events'].append(event);self.data['events']=self.data['events'][-128:]
   if state=='active':self.data['active'][key]=dict(event)
   else:self.data['active'].pop(key,None)
@@ -36,7 +40,7 @@ class Alerts:
   with self.lock:
    for key in list(self.data['active']):
     if key.startswith('service-') and key[8:] not in checked['watch']:self.event(key,'已取消监控','该服务的异常监控已关闭','resolved',time.time())
-   self.data['rules']=checked;self.counters={};save(self.path,self.data)
+   self.data['rules']={**self.data['rules'],**checked};self.counters={};save(self.path,self.data)
    return self.snapshot()
  def update(self,point,resources,now=None):
   now=time.time() if now is None else now
@@ -46,6 +50,7 @@ class Alerts:
     for key,title,suffix in [('temperature','处理器温度','°C'),('memory','内存使用率','%')]:
      value=point.get(key);known=type(value) in (int,float) and math.isfinite(value)
      conditions['data-'+key]=(not known,title+'读数不可用','请检查采样状态')
+     if not known:self.counters.pop(key,None)
      if known:
       threshold=rules[key]-(5 if key in active else 0)
       conditions[key]=(value>=threshold if key not in active else value>threshold,title+'偏高',f'当前 {value:.1f}{suffix}，阈值 {rules[key]}{suffix}')
@@ -54,6 +59,7 @@ class Alerts:
      d=disks.get(path);mounted=point.get('storage_mounts',{}).get(path,True)
      known=bool(d) and type(d.get('total')) in (int,float) and d['total']>0 and type(d.get('used')) in (int,float) and math.isfinite(d['total']) and math.isfinite(d['used']) and 0<=d['used']<=d['total'] and mounted
      conditions['data-disk-'+path]=(not known,'磁盘读数不可用',path+' 未挂载或容量采样不可用，请检查数据盘')
+     if not known:self.counters.pop('disk-'+path,None)
      if known:
       key='disk-'+path;percent=100*d['used']/d['total'];threshold=rules['disk']-(3 if key in active else 0)
       conditions[key]=(percent>threshold if key in active else percent>=threshold,'磁盘空间不足',path+f' 已用 {percent:.1f}%')
@@ -66,8 +72,8 @@ class Alerts:
     self.data['services_sampled_at']=now
    for key,(bad,title,message) in conditions.items():
     old=self.counters.get(key,(None,0));count=old[1]+1 if old[0]==bad else 1;self.counters[key]=(bad,count)
-    if bad and key not in active and count>=3:self.event(key,title,message,'active',now)
-    elif not bad and key in active and count>=2:self.event(key,title+' · 已恢复',message,'resolved',now)
+    if bad and key not in active and count>=rules['debounce_samples']:self.event(key,title,message,'active',now)
+    elif not bad and key in active and count>=rules['recovery_samples']:self.event(key,title+' · 已恢复',message,'resolved',now,recovered=True)
     elif bad and key in active:active[key]['message']=message
    save(self.path,self.data)
  def start(self,telemetry,control,stop=None):

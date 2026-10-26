@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: Apache-2.0
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const context={window:{},document:{getElementById:()=>null},console};vm.createContext(context);
+const path='android/assets/observability-ui.js';
+assert.ok(fs.existsSync(path),'live logs and selectable history UI are required');
+vm.runInContext(fs.readFileSync(path,'utf8'),context);
+const o=context.window.Observability;
+const pts=[{time:1,cpu:12,memory:30,network:{eth0:{rx:2048,tx:512}}},{time:4,cpu:null,memory:Infinity,network:{}},{time:30,cpu:25,memory:40,network:{eth0:{rx:-1,tx:0}}}];
+assert.equal(JSON.stringify(o.series(pts,'cpu','eth0').map(x=>x.value)),'[12,null,25]');
+assert.equal(JSON.stringify(o.series(pts,'rx','eth0').map(x=>x.value)),'[2048,null,null]');
+assert.equal(JSON.stringify(o.segments(o.series(pts,'cpu','eth0')).map(a=>a.length)),'[1,1]');
+assert.equal(JSON.stringify(o.segments([{time:1,value:1},{time:20,value:3}]).map(a=>a.length)),'[1,1]');
+assert.equal(o.format(2048,'rx'),'2.0 KiB/s');assert.equal(o.format(35,'cpu'),'35.0%');assert.equal(o.format(null,'memory'),'暂无读数');
+assert.equal(JSON.stringify(o.filterLines(['INFO ok','ERROR broken','WARN wait','plain'],'broken','error')),'["ERROR broken"]');
+assert.equal(JSON.stringify(o.filterLines(['error user data','warn next','INFO ok'],'','warning')),'["warn next"]');
+assert.equal(JSON.stringify(o.mergeLines(['a'],{reset:false,lines:['b']})),'["a","b"]');
+assert.equal(JSON.stringify(o.mergeLines(['secret'],{reset:true,lines:['new']})),'["new"]');
+assert.ok(o.mergeLines([], {lines:Array(5000).fill('x'.repeat(4096)),reset:true}).join('\n').length<=262144);
+assert.equal(o.series([{time:1,temperature:-5}],'temperature','')[0].value,-5);
+console.log('Observability series units/gaps, severity/search, reset and storage bounds passed');

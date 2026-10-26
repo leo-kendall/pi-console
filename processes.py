@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Process sampling and exact-PID SIGTERM, with host OS essentials read-only."""
 import hashlib,hmac,json,os,pwd,re,secrets,select,signal,threading,time
+from collections import OrderedDict,deque
 from pathlib import Path
 from control import ApiError
 from process_identity import parse_stat,read_process,fingerprint
@@ -10,7 +11,7 @@ from process_privilege import helper_ready,invoke
 class Processes:
  def __init__(self,proc=Path('/proc'),policy=process_policy):
   self.proc=Path(proc);self.uid=os.getuid();self.policy=policy;self.key=secrets.token_bytes(32)
-  self.ticks=os.sysconf('SC_CLK_TCK');self.page_size=os.sysconf('SC_PAGE_SIZE');self.lock=threading.RLock();self.previous={};self.last=0;self.cached=None
+  self.ticks=os.sysconf('SC_CLK_TCK');self.page_size=os.sysconf('SC_PAGE_SIZE');self.lock=threading.RLock();self.previous={};self.last=0;self.cached=None;self.histories=OrderedDict()
  def read(self,pid):return read_process(self.proc,pid,self.page_size)
  def needs_admin(self,p):return not p.get('uids') or any(v!=self.uid for v in p['uids'])
  def fresh(self,pid):
@@ -54,8 +55,35 @@ class Processes:
    result.sort(key=lambda p:p['rss_bytes'],reverse=True)
    # Show all identities; low-memory applications must remain discoverable.
    shown=result
+   self._record_histories(result,time.time(),now)
    self.previous=current;self.last=now;self.cached=dict(processes=shown,count=len(result),shown=len(shown),closable=sum(p['can_close'] for p in result),admin_helper_ready=helper_ready(),sampled_at=time.time(),interval_seconds=3,memory_total=mem.get('MemTotal'),memory_available=mem.get('MemAvailable'))
    return self.cached
+ def _record_histories(self,records,wall,now):
+  byid={(p['pid'],p['start']):p for p in records}
+  for identity,entry in list(self.histories.items()):
+   if now-entry['access']>900:
+    del self.histories[identity];continue
+   p=byid.get(identity)
+   point={'time':wall,'cpu_percent':p.get('cpu_percent') if p else None,'rss_bytes':p.get('rss_bytes') if p else None,'memory_percent':p.get('memory_percent') if p else None}
+   entry['points'].append(point)
+   while entry['points'] and wall-entry['points'][0]['time']>900:entry['points'].popleft()
+ def history(self,pid,start):
+  if type(pid)!=int or type(start)!=int or not 1<=pid<2**31 or not 0<=start<2**64:raise ApiError('无效进程标识')
+  with self.lock:
+   identity=(pid,start);entry=self.histories.get(identity)
+   try:p=self.read(pid)
+   except (OSError,ValueError,IndexError):
+    if entry is None:raise ApiError('进程已退出，请刷新列表',404)
+    p=None
+   if p is not None and p['start']!=start:raise ApiError('进程已变化，请重新打开详情',409)
+   data=self.snapshot();now=time.monotonic()
+   if identity not in self.histories:
+    self.histories[identity]={'points':deque(maxlen=301),'access':now}
+    item=next((r for r in data['processes'] if (r['pid'],r['start'])==identity),None)
+    if item:self.histories[identity]['points'].append({'time':data['sampled_at'],'cpu_percent':item['cpu_percent'],'rss_bytes':item['rss_bytes'],'memory_percent':item['memory_percent']})
+   entry=self.histories[identity];entry['access']=now;self.histories.move_to_end(identity)
+   while len(self.histories)>64:self.histories.popitem(last=False)
+   return {'pid':pid,'start':start,'points':[dict(x) for x in entry['points']],'ended':p is None,'interval_seconds':3,'retention_seconds':900,'sampled_at':data['sampled_at']}
  def signature(self,owner,p):
   value=json.dumps([owner,fingerprint(p)],separators=(',',':'))
   return hmac.new(self.key,value.encode(),hashlib.sha256).hexdigest()

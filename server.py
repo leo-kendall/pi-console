@@ -24,6 +24,8 @@ sys.dont_write_bytecode = True
 from metrics import collect_status
 from config import SETTINGS
 from resource_end import ResourceEnd,annotate_inventory
+from setup_checks import report as setup_report
+from process_privilege import helper_ready
 
 
 ROOT = Path(__file__).resolve().parent
@@ -153,13 +155,16 @@ class Handler(socketserver.StreamRequestHandler):
             target = urlsplit(path)
             data = json.loads(body) if body else {}
             if not isinstance(data, dict): raise ApiError("无效请求")
-            if method == "POST" and path == "/api/pair":
+            if method == "GET" and path == "/api/connection":
+                result = {"app":"pi-console","protocol":1}
+            elif method == "POST" and path == "/api/pair":
                 if set(data) != {"code"}: raise ApiError("无效配对请求")
                 result = CONTROL.pair(data["code"])
             else:
                 auth = headers.get(b"authorization", b"").decode("ascii")
                 owner = CONTROL.authenticate(auth[7:] if auth.startswith("Bearer ") else "")
-                if method=="GET" and target.path=="/api/status":result=json.loads(CACHE.get())
+                if method=="GET" and path=="/api/setup":result=setup_report(ROOT,SETTINGS['resources'],helper_ready())
+                elif method=="GET" and target.path=="/api/status":result=json.loads(CACHE.get())
                 elif method=="GET" and target.path=="/api/history":result=TELEMETRY.history(parse_qs(target.query).get("window",["5m"])[0])
                 elif method=="GET" and path=="/api/storage/roots":result={"roots":[{"id":k,"path":str(v)} for k,v in STORAGE.roots.items()]}
                 elif method == "GET" and path == "/api/resources":

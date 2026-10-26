@@ -18,7 +18,7 @@ def load_config(path):
   p=Path(path)
   if p.is_symlink() or p.stat().st_size>65536:raise ValueError('configuration must be a regular JSON file under 64 KiB')
   data=json.loads(p.read_text(),object_pairs_hook=_unique)
- if not isinstance(data,dict) or set(data)-{'name','resources','storage_roots','disks','desktop_timezone'}:raise ValueError('unknown configuration fields')
+ if not isinstance(data,dict) or set(data)-{'name','resources','storage_roots','disks','desktop_timezone','file_roots'}:raise ValueError('unknown configuration fields')
  name=data.get('name','Pi Console')
  if not isinstance(name,str) or not 1<=len(name)<=64 or any(ord(c)<32 for c in name):raise ValueError('invalid server name')
  timezone=data.get('desktop_timezone','UTC')
@@ -43,6 +43,13 @@ def load_config(path):
   if not re.fullmatch(r'[a-z][a-z0-9-]{0,31}',key) or not isinstance(value,str) or not Path(value).is_absolute() or '\x00' in value:raise ValueError('storage roots must be absolute paths')
  disks=data.get('disks',['/'])
  if not isinstance(disks,list) or not disks or len(disks)>16 or any(not isinstance(p,str) or not Path(p).is_absolute() or '\x00' in p for p in disks) or len(set(disks))!=len(disks):raise ValueError('disks must be unique absolute mount paths')
- return {'name':name,'resources':checked,'storage_roots':{k:Path(v) for k,v in roots.items()},'disks':disks,'desktop_timezone':timezone}
+ file_roots=data.get('file_roots',{})
+ if not isinstance(file_roots,dict) or len(file_roots)>16:raise ValueError('invalid file roots')
+ for key,entry in file_roots.items():
+  if not isinstance(key,str) or not re.fullmatch('[a-z][a-z0-9-]{0,31}',key) or key=='default' or not isinstance(entry,dict) or set(entry)!={'name','path','writable'}:raise ValueError('invalid file root')
+  if not isinstance(entry['name'],str) or not 1<=len(entry['name'])<=64 or any(ord(c)<32 for c in entry['name']) or not isinstance(entry['path'],str) or not Path(entry['path']).is_absolute() or '\x00' in entry['path'] or type(entry['writable'])!=bool:raise ValueError('invalid file root fields')
+  path=Path(entry['path'])
+  if '..' in path.parts or entry['writable'] and (str(path) in ('/','/etc','/boot','/usr','/var','/var/lib','/home') or any(path==Path(p) or Path(p) in path.parents for p in ('/etc','/boot','/usr','/proc','/sys','/dev','/run','/bin','/sbin','/lib'))):raise ValueError('system file roots cannot be writable')
+ return {'name':name,'resources':checked,'storage_roots':{k:Path(v) for k,v in roots.items()},'disks':disks,'desktop_timezone':timezone,'file_roots':file_roots}
 
 SETTINGS=load_config(Path(os.environ.get('PI_CONSOLE_CONFIG',str(ROOT/'config.json'))))

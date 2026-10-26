@@ -54,6 +54,8 @@ class Control:
   self.lock=threading.RLock();self.runner=runner;self.inventory_runner=inventory_runner;self.attempts=deque();self.action_times={};self.busy=set()
   self.enforce_roles=False
   self.auth=self.read('auth.json',{'devices':{},'pair':None})
+  from grants import Grants
+  self.grants=Grants(self)
   self.operations=self.read('actions.json',{})
   if recover:
    for op in self.operations.values():
@@ -160,7 +162,7 @@ class Control:
  def operations_for(self,owner):
   with self.lock:
    rows=sorted((v for v in self.operations.values() if v['owner']==owner),key=lambda x:x['created'],reverse=True)[:100]
-   return {'operations':[{k:v for k,v in row.items() if k!='owner'} for row in rows]}
+   return {'operations':[{k:v for k,v in row.items() if k not in ('owner','result')} for row in rows]}
  def startup(self):
   result=[]
   source=ROOT/'system-control/helper.py'
@@ -184,12 +186,13 @@ class Control:
    state=found.get((kind,name),{}).get('state','not-found' if complete else 'unavailable')
    enabled=kind!='system' or Path(HELPER).is_file()
    result.append(dict(id=rid,name=label,kind=kind,target=name,state=state,impact=impact,control=enabled and state not in ('not-found','unavailable'),logs=enabled))
-  return merge_inventory(result,inventory)
- def logs(self,rid):return {'text':self.runner(command_for(rid,'logs'))[-65536:],'sampled_at':time.time()}
+  return self.grants.apply(merge_inventory(result,inventory))
+ def command(self,rid,action):return self.grants.command(rid,action) if rid in self.grants.entries() else command_for(rid,action)
+ def logs(self,rid):return {'text':self.runner(self.command(rid,'logs'))[-65536:],'sampled_at':time.time()}
  def action(self,owner,rid,action,request):
-  args=command_for(rid,action)
+  self.command(rid,action)
   if action=='logs' or not isinstance(request,str) or not re.fullmatch(r'[a-zA-Z0-9-]{12,64}',request):raise ApiError('无效请求标识')
-  return self.enqueue(owner,rid,action,request,lambda:self.runner(args))
+  return self.enqueue(owner,rid,action,request,lambda:self.runner(self.command(rid,action)))
  def enqueue(self,owner,rid,action,request,execute_job):
   if not isinstance(request,str) or not re.fullmatch(r'[a-zA-Z0-9-]{12,64}',request):raise ApiError('无效请求标识')
   with self.lock:
@@ -211,7 +214,8 @@ class Control:
   with self.lock:op=self.operations[oid];op['state']='running';op['message']='执行中';self.persist_ops()
   try:
    if self.enforce_roles:self.require(op['owner'],'operator')
-   execute_job();state='success';message='操作完成，请查看最新状态'
+   result=execute_job();state='success';message='操作完成，请查看最新状态'
+   if isinstance(result,(dict,list)) and len(json.dumps(result,ensure_ascii=False).encode())<=65536:op['result']=result
   except Exception as e:state='uncertain';message=str(e) if isinstance(e,ApiError) else '执行异常，请刷新状态核实'
   with self.lock:op.update(state=state,message=message,updated=time.time());self.busy.discard(op['resource']);self.persist_ops()
  def operation(self,owner,oid):

@@ -18,6 +18,8 @@ from processes import Processes
 from alerts import Alerts
 from storage import Storage
 from files import Files
+from file_spaces import FileSpaces
+from file_api import dispatch as file_dispatch
 from health import report
 
 sys.dont_write_bytecode = True
@@ -180,6 +182,13 @@ class Handler(socketserver.StreamRequestHandler):
                     if set(data)!={'role'}:raise ApiError('无效设备请求')
                     result={'code':CONTROL.new_code(data['role']),'expires_seconds':600,'role':data['role']}
                 elif method=='GET' and path=='/api/audit':result=CONTROL.audit(owner)
+                elif method=='GET' and path=='/api/grants':result=CONTROL.grants.list(owner)
+                elif method=='POST' and path=='/api/grants/set':
+                    if set(data)!={'resource','rights','identity'}:raise ApiError('无效授权请求')
+                    result=CONTROL.grants.set(owner,data['resource'],data['rights'],data['identity']);RESOURCE_CACHE[0]=0
+                elif method=='POST' and path=='/api/grants/remove':
+                    if set(data)!={'resource'}:raise ApiError('无效授权请求')
+                    result=CONTROL.grants.remove(owner,data['resource']);RESOURCE_CACHE[0]=0
                 elif method=="GET" and path=="/api/setup":result=setup_report(ROOT,SETTINGS['resources'],helper_ready())
                 elif method=="GET" and target.path=="/api/status":result=json.loads(CACHE.get())
                 elif method=="GET" and target.path=="/api/history":result=TELEMETRY.history(parse_qs(target.query).get("window",["5m"])[0])
@@ -208,29 +217,7 @@ class Handler(socketserver.StreamRequestHandler):
                     result=CONTROL.action(owner,data['resource'],data['action'],data['request'])
                 elif method=='GET' and path=='/api/health-report':result=report(TELEMETRY.history('60m')['points'])
                 elif path.startswith('/api/files/'):
-                    if FILES is None:raise ApiError('文件区不可用',503)
-                    action=path.removeprefix('/api/files/')
-                    if method=='GET' and action=='list':result=FILES.list('')
-                    elif method=='GET' and action=='trash':result=FILES.trash_list(owner)
-                    elif method!='POST':raise ApiError('接口不存在',404)
-                    elif action=='list' and set(data)=={'path'}:result=FILES.list(data['path'])
-                    elif action=='stat' and set(data)=={'path'}:result=FILES.stat(owner,data['path'])
-                    elif action=='read' and set(data)=={'path','offset','ticket'}:result=FILES.read(owner,data['path'],data['offset'],data['ticket'])
-                    elif action=='upload/start' and set(data)=={'directory','name','size'}:result=FILES.create_upload(owner,data['directory'],data['name'],data['size'])
-                    elif action=='upload/chunk' and set(data)=={'id','offset','data'}:result=FILES.append(owner,data['id'],data['offset'],data['data'])
-                    elif action=='upload/abort' and set(data)=={'id'}:FILES.abort(owner,data['id']);result={'ok':True}
-                    elif action=='upload/finish' and set(data)=={'id','sha256','request'}:
-                        FILES.ident(data['id']);result=CONTROL.enqueue(owner,'upload-'+data['id'],'upload',data['request'],lambda:FILES.finish(owner,data['id'],data['sha256']))
-                    elif action=='mkdir' and set(data)=={'path','name','request'}:
-                        result=CONTROL.enqueue(owner,'files-mkdir','mkdir',data['request'],lambda:FILES.mkdir(data['path'],data['name']))
-                    elif action in ('rename','trash') and set(data)==({'path','name','ticket','request'} if action=='rename' else {'path','ticket','request'}):
-                        import hashlib
-                        resource='file-'+hashlib.sha256(str(data['path']).encode()).hexdigest()[:20]
-                        job=(lambda:FILES.rename(owner,data['path'],data['name'],data['ticket'])) if action=='rename' else (lambda:FILES.trash(owner,data['path'],data['ticket']))
-                        result=CONTROL.enqueue(owner,resource,action,data['request'],job)
-                    elif action=='restore' and set(data)=={'id','request'}:
-                        FILES.ident(data['id']);result=CONTROL.enqueue(owner,'trash-'+data['id'],'restore',data['request'],lambda:FILES.restore(owner,data['id']))
-                    else:raise ApiError('无效文件请求')
+                    result=file_dispatch(method,path,data,owner,FILES,CONTROL)
                 elif method == "GET" and target.path == "/api/storage/scan":
                     result=STORAGE.scan(parse_qs(target.query).get('root',['home'])[0])
                 elif method == "GET" and path == "/api/storage/cleanup":
@@ -341,7 +328,7 @@ def main():
     CONTROL = Control()
     RESOURCE_END = ResourceEnd(CONTROL,PROCESSES)
     DESKTOP = Desktop()
-    FILES = Files()
+    FILES = FileSpaces(roots=SETTINGS['file_roots'])
     FILES.start_cleanup()
     TELEMETRY.start()
     ALERTS = Alerts()

@@ -38,7 +38,7 @@ def main():
  if action=='install':RULE_BYTES=sudo_rule(args.user)
  if action not in ('preview','install','uninstall'):raise RuntimeError('Use preview/install/uninstall')
  if action=='preview':
-  print('Root-owned fixed auxiliary-service executor. Only display/printer controls; no arbitrary units or shell. Creates '+str(HELPER)+', '+str(LIB)+', '+str(RULE)+', '+str(STATE)+'. All removable using uninstall.');return
+  print('Root-owned service executor. Exact service targets only; core units, aliases and dependencies remain protected. No shell or arbitrary commands. Creates '+str(HELPER)+', '+str(LIB)+', '+str(RULE)+', '+str(STATE)+'. All removable using uninstall.');return
  if os.geteuid()!=0:raise RuntimeError('Run using sudo /usr/bin/python3 -I -B '+str(Path(__file__).resolve())+' '+action)
  targets=[HELPER,RULE]
  for p in [STATE,RECORD,LIB,*targets]:safe(p,True)

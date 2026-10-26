@@ -18,9 +18,12 @@ def main():
   children=[]
   try:
    children.append(subprocess.Popen([sys.executable,'-B','scripts/preview_ui.py'],cwd=ROOT,stdout=log,stderr=log))
+   print('Firefox executable:',browser,flush=True)
+   subprocess.run([browser,'--version'],check=True,stdout=log,stderr=log,timeout=10)
+   (Path(profile)/'user.js').write_text('user_pref("remote.log.level", "Trace");\n')
    children.append(subprocess.Popen([browser,'--headless','--no-remote','--profile',profile,'--remote-debugging-port','19226','about:blank'],cwd=ROOT,stdout=log,stderr=log))
    for port in (18777,19226):
-    for _ in range(150):
+    for _ in range(300):
      if any(p.poll() is not None for p in children):raise RuntimeError('Preview server or Firefox exited before tests started.')
      try:
       with socket.create_connection(('127.0.0.1',port),timeout=.2):break

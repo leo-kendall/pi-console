@@ -35,6 +35,16 @@ final class ProbeRules {
   return "network";
  }
  static String pairingError(int status){return status==401?"配对码无效或已过期，请在后端项目目录重新生成":status==429?"配对尝试过多，请等待一分钟再试":"配对失败，请检查服务器状态";}
+ static final class HttpFailure extends Exception {
+  HttpFailure(int status,boolean pairing){super(pairing&&(status==401||status==429)?pairingError(status):
+   status==401?"请先配对当前服务器":status==429?"操作过快，请稍后重试":
+   status>=300&&status<400?"服务器返回重定向，请填写最终 HTTPS 地址":"请求失败（"+status+"），请检查服务器状态");}
+ }
+ static String apiError(Exception error){
+  if(error instanceof HttpFailure)return error.getMessage();
+  String code=failure(error);
+  return code.equals("network")?"服务器响应无法读取，请检查完整 API 地址、后端版本和网络":title(code)+"。"+detail(code);
+ }
  static String title(String code){
   switch(code){
    case "ok":return "服务器可以连接";

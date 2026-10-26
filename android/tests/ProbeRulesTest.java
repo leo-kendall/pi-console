@@ -27,6 +27,12 @@ public final class ProbeRulesTest {
   }
   check(ProbeRules.pairingError(401).contains("过期"),"expired pairing code guidance");
   check(ProbeRules.pairingError(429).contains("分钟"),"pair rate-limit guidance");
+  String privateBody="secret-body-with-pairing-token";
+  check(!ProbeRules.apiError(new Exception(privateBody)).contains(privateBody),"never echo parser/body diagnostics");
+  check(!ProbeRules.apiError(new SSLHandshakeException(privateBody)).contains(privateBody),"never echo provider subject");
+  check(ProbeRules.apiError(new ProbeRules.HttpFailure(404,false)).contains("（404）"),"legacy setup fallback preserved");
+  check(ProbeRules.apiError(new ProbeRules.HttpFailure(401,true)).contains("过期"),"pair401 remains actionable");
+  check(ProbeRules.apiError(new ProbeRules.HttpFailure(429,true)).contains("分钟"),"pair retry limit preserved");
   System.out.println("Connection diagnosis classification and backend identity tests passed");
  }
  static void check(boolean value,String message){if(!value)throw new AssertionError(message);}

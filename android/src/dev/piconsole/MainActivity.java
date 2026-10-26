@@ -87,7 +87,7 @@ public final class MainActivity extends Activity {
     if(path.equals("/api/pair")){ServerSettings.pair(MainActivity.this,session,response.getString("token"));response=new JSONObject().put("paired",true);}
     if(path.equals("/api/unpair")){AlertMonitorService.stop(MainActivity.this);ServerSettings.forget(MainActivity.this);}
     result(id,response,null);
-   }catch(Exception e){result(id,null,e.getMessage()==null?"连接失败，请检查网络和服务器地址":e.getMessage());}finally{pending.decrementAndGet();}});
+   }catch(Exception e){result(id,null,Arrays.asList("/api/status","/api/setup","/api/pair").contains(path)?ProbeRules.apiError(e):e.getMessage()==null?"连接失败，请检查网络和服务器地址":e.getMessage());}finally{pending.decrementAndGet();}});
   }
   @JavascriptInterface public void local(String id,String action,String value){
    if(action.equals("probeServer")){

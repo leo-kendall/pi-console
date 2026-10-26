@@ -24,11 +24,7 @@ final class StatusClient {
    if(method.equals("POST")){byte[] bytes=body.getBytes(StandardCharsets.UTF_8);if(bytes.length>262144)throw new Exception("请求过大");c.setDoOutput(true);c.setFixedLengthStreamingMode(bytes.length);try(java.io.OutputStream out=c.getOutputStream()){out.write(bytes);}}
    int code=c.getResponseCode();
    if(code!=200){
-    if(path.equals("/api/pair")&&(code==401||code==429))throw new Exception(ProbeRules.pairingError(code));
-    if(code==401)throw new Exception("请先配对当前服务器");
-    if(code==429)throw new Exception("操作过快，请稍后重试");
-    if(code>=300&&code<400)throw new Exception("服务器返回重定向，请填写最终 HTTPS 地址");
-    throw new Exception("请求失败（"+code+"），请检查服务器状态");
+    throw new ProbeRules.HttpFailure(code,path.equals("/api/pair"));
    }
    try(InputStream input=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
     byte[] buf=new byte[8192];int n;while((n=input.read(buf))!=-1){if(out.size()+n>1048576)throw new Exception("响应过大");out.write(buf,0,n);}

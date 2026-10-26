@@ -90,6 +90,11 @@ public final class MainActivity extends Activity {
    }catch(Exception e){result(id,null,e.getMessage()==null?"连接失败，请检查网络和服务器地址":e.getMessage());}finally{pending.decrementAndGet();}});
   }
   @JavascriptInterface public void local(String id,String action,String value){
+   if(action.equals("probeServer")){
+    if(!id.matches("[0-9]{1,12}")||value.length()>2048){result(id,null,"无效检测请求");return;}
+    if(pending.incrementAndGet()>12){pending.decrementAndGet();result(id,null,"请求过多，请稍候");return;}
+    pool.execute(()->{try{result(id,ConnectionProbe.run(value),null);}catch(Exception e){result(id,null,"检测未完成，请稍后重试");}finally{pending.decrementAndGet();}});return;
+   }
    runOnUiThread(()->{try{
     JSONObject out=new JSONObject();AppStore store=new AppStore(MainActivity.this);
     if(action.equals("licenses")){

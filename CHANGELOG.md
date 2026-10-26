@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0-beta.2
+
+- Added a three-step setup guide: server address, device pairing and read-only feature checks.
+- Added credential-free HTTPS diagnostics with DNS, certificate, timeout, redirect and endpoint hints.
+- Kept manual pairing available for older backends without the diagnostic endpoint.
+- Preserved unsaved addresses when refreshing settings and ignored outdated diagnostic responses.
+- Clarified expired pairing codes and pairing retry limits.
+- Added browser regressions for setup, stale requests and narrow-screen layouts.
+
+Remote-desktop edge black regions remain unresolved. Desktop protocol support and physical keyboard support are unchanged.
+
 ## 0.5.0-beta.1
 
 First public test release.

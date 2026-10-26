@@ -16,6 +16,7 @@ Demo data: overview and service management.
 
 ## Features
 
+- Guided server setup with credential-free HTTPS diagnostics, device pairing and read-only optional feature checks. Older backends can still be paired manually.
 - Live CPU, temperature, memory, disk and network metrics with sampling history.
 - Automatic discovery of systemd services and Docker containers. Persistent controls and logs require configuration; eligible running applications can also be stopped after one-time confirmation.
 - Process details and sorting by memory or CPU. Application processes can be terminated normally; essential system processes remain read-only.

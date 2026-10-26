@@ -48,7 +48,7 @@ public final class MainActivity extends Activity {
     String url=r.getUrl().toString();
     if(!url.startsWith(origin))return blocked();
     String name=url.substring(origin.length());
-    if(!Arrays.asList("index.html","style.css","app.js","app-state.js","resources-ui.js","process-ui.js","tools-ui.js","files-ui.js","guacamole.js","desktop-layout.js","desktop-diagnostics.js","desktop-ui.js").contains(name))return blocked();
+    if(!Arrays.asList("index.html","style.css","app.js","app-state.js","setup-ui.js","resources-ui.js","process-ui.js","tools-ui.js","files-ui.js","guacamole.js","desktop-layout.js","desktop-diagnostics.js","desktop-ui.js").contains(name))return blocked();
     try {
      String mime=name.endsWith(".html")?"text/html":name.endsWith(".css")?"text/css":"application/javascript";
      Map<String,String> headers=new HashMap<>();headers.put("Content-Security-Policy","default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data: blob:; media-src data: blob:; connect-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'");

@@ -130,7 +130,7 @@ $('desk-inspect').onclick=async()=>{
   if(generation!==desktopGeneration)return;
   const after=await desktopSample(client);
   if(generation!==desktopGeneration)return;
-  const report={version:'0.5.0-beta.1',build:20,mode:desktopRenderMode,cursorPositioning:'layout',sampling:{controlsHidden:true,mayTriggerRepaint:true,automaticEdgeCapture:true},edges:desktopEdgeProbe?.snapshot()||[],before,after,trace:desktopTrace.snapshot()};
+  const report={version:'0.5.0-beta.2',build:21,mode:desktopRenderMode,cursorPositioning:'layout',sampling:{controlsHidden:true,mayTriggerRepaint:true,automaticEdgeCapture:true},edges:desktopEdgeProbe?.snapshot()||[],before,after,trace:desktopTrace.snapshot()};
   try{localStorage.setItem('desktop-last-report',JSON.stringify(report));}catch(e){}
   showDesktopReport(report);
  }catch(e){toast('画面仍在调整，请稍后再检查');}finally{document.body.classList.remove('desktop-sampling');button.disabled=false;}

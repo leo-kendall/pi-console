@@ -142,6 +142,7 @@ class Maintenance:
     if runner:runner('start')
     receipt['phase']='applied';save(backup/'receipt.json',receipt);save(current,receipt)
    except BaseException:
+    if runner:runner('stop')
     self._restore(ident)
     if runner:
      try:runner('start')

@@ -45,6 +45,7 @@ async function showProcessDetail(pid){
   const facts=[['进程 ID',String(p.pid)],['所属用户',p.owner],['状态',processState(p.state)],['物理内存（RSS）',size(p.rss_bytes)],['占总内存',number(p.memory_percent,1)+'%'],['CPU 使用率',p.cpu_percent===null?'采样中':number(p.cpu_percent,1)+'%'],['虚拟地址空间',size(p.virtual_bytes)],['运行时间',processDuration(p.elapsed_seconds)],['线程数',String(p.threads)],['父进程 ID',String(p.ppid)]];
   if(p.app_rss_bytes>p.rss_bytes)facts.push(['同组进程 RSS',size(p.app_rss_bytes)]);
   const dl=element('dl',undefined,'process-facts');for(const [label,value]of facts)dl.append(element('dt',label),element('dd',value));box.append(dl,element('p','可执行文件','field-label'),element('code',p.exe||'当前用户无法读取路径'),element('p','进程归属','field-label'),element('code',p.cgroup),element('p',p.reason,'process-policy'));
+  if(window.attachProcessHistory)attachProcessHistory(box,p);
   const refresh=element('button','刷新进程详情','text-button');refresh.onclick=()=>showProcessDetail(pid);box.append(refresh);if(p.can_close&&p.control_available===false){box.append(element('p','这是可结束的应用进程，并非系统只读；当前后台用户没有执行权限。请在服务器终端完成一次管理员授权，然后刷新详情。','process-policy'),element('code','sudo /usr/bin/python3 -I -B process-control/manage.py install'));}
   else if(p.can_close){const r=processResource(p),button=element('button',actionJournal.get(r.id)?'核实上次关闭请求':'正常结束进程','primary danger-button');box.append(button);button.onclick=()=>actionJournal.get(r.id)?recoverProcess(r):confirmProcess(p);}
   else box.append(element('p','当前不能执行结束操作，具体原因见上方说明。','footnote'));

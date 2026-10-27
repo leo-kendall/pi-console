@@ -6,6 +6,7 @@ public final class UpdateRulesTest {
  static void check(boolean b){if(!b)throw new AssertionError();}
  public static void main(String[] a)throws Exception{
   check(UpdateRules.newer("0.6.0","0.5.0-beta.2"));check(UpdateRules.newer("v0.5.0","0.5.0-beta.2"));check(!UpdateRules.newer("0.5.0-beta.1","0.5.0-beta.2"));check(UpdateRules.newer("0.5.0-beta.10","0.5.0-beta.2"));
+  check(UpdateRules.apkName("pi-console.apk"));check(UpdateRules.apkName("pi-console-release.apk"));check(UpdateRules.apkName("pi-console-0.6.0-beta.1.apk"));check(!UpdateRules.apkName("pi-console-debug.apk"));check(!UpdateRules.apkName("other.apk"));
   UpdateRules.url("https://github.com/leo-kendall/pi-console/releases/download/v1/a.apk");
   deny(()->UpdateRules.url("http://github.com/a"));deny(()->UpdateRules.url("https://github.com.evil.test/a"));deny(()->UpdateRules.url("https://user:pass@github.com/a"));deny(()->UpdateRules.url("https://github.com:444/a"));
   check(UpdateRules.signers(new String[]{"old"},new String[]{"new"},new String[]{"old","new"}));

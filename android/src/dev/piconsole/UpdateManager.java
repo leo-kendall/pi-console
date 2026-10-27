@@ -12,7 +12,7 @@ final class UpdateManager {
   for(int i=0;i<releases.length();i++){JSONObject r=releases.getJSONObject(i);if(r.optBoolean("draft")||r.optBoolean("prerelease")&&!prerelease)continue;String version=r.optString("tag_name");if(!UpdateRules.newer(version,current))continue;if(best==null||UpdateRules.newer(version,best.optString("tag_name")))best=r;}
   JSONObject out=new JSONObject().put("current",current).put("available",best!=null).put("channel",prerelease?"prerelease":"stable").put("source",FEED);
   if(best!=null){String tag=best.getString("tag_name");out.put("version",tag).put("notes",best.optString("body","")).put("downloadable",false);
-   JSONArray assets=best.getJSONArray("assets");for(int i=0;i<assets.length();i++){JSONObject a=assets.getJSONObject(i);String name=a.optString("name");if(!name.matches("pi-console(?:-release)?\\.apk"))continue;
+   JSONArray assets=best.getJSONArray("assets");for(int i=0;i<assets.length();i++){JSONObject a=assets.getJSONObject(i);String name=a.optString("name");if(!UpdateRules.apkName(name))continue;
     try{String url=a.getString("browser_download_url");UpdateRules.url(url);if(!url.startsWith("https://github.com/leo-kendall/pi-console/releases/download/"))throw new IOException("资源不属于官方发布");String digest=UpdateRules.digest(a.optString("digest",null));long size=a.getLong("size");if(size<=0||size>UpdateRules.MAX_APK)throw new IOException("APK 大小无效");out.put("url",url).put("sha256",digest).put("bytes",size).put("downloadable",true);}catch(Exception invalid){out.put("blocked",invalid.getMessage());}break;
    }
    if(!out.getBoolean("downloadable")&&!out.has("blocked"))out.put("blocked","此发布尚未提供可验证的 Android APK");

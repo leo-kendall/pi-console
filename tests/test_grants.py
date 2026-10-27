@@ -39,4 +39,17 @@ class GrantTests(unittest.TestCase):
   self.c.grants.set(self.admin,'found-photo',['stop'],'a'*64)
   self.rows=[]
   self.c.grants.remove(self.admin,'found-photo')
-  self.assertEqual(self.c.grants.entries()['found-photo']['rights'],[])
+  with self.assertRaises(ApiError):self.c.command('found-photo','stop')
+ def test_revoking_ungranted_discovery_rows_never_exhausts_grant_storage(self):
+  for i in range(129):
+   self.rows=[dict(id='found-'+str(i),kind='container',target='app'+str(i),identity='a'*64,name='App')]
+   self.c.grants.remove(self.admin,'found-'+str(i))
+  self.assertIsInstance(self.c.grants.list(self.admin)['grants'],list)
+  self.rows=[dict(id='found-valid',kind='container',target='valid',identity='a'*64,name='Valid')]
+  self.c.grants.set(self.admin,'found-valid',['logs'],'a'*64)
+  self.assertEqual(self.c.command('found-valid','logs')[-1],'a'*64)
+ def test_inventory_timeout_is_an_actionable_api_error(self):
+  from discovery import InventoryError
+  from grants import unit_commands
+  def timeout(args):raise InventoryError('timed out')
+  with self.assertRaises(ApiError):unit_commands('user','ordinary.service','stop',timeout)

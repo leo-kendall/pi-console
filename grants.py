@@ -3,14 +3,14 @@
 import importlib.util,re,stat
 from pathlib import Path
 from control import ApiError,DOCKER,ROOT,RESOURCES,HELPER
-from discovery import collect_inventory
+from discovery import collect_inventory,InventoryError
 from local_state import save
 spec=importlib.util.spec_from_file_location('pi_console_unit_policy',ROOT/'system-control/helper.py')
 policy=importlib.util.module_from_spec(spec);spec.loader.exec_module(policy)
 
 def unit_commands(kind,target,action,reader):
  try:return policy.unit_command(kind,target,action,reader)
- except (ValueError,OSError):raise ApiError('服务属于系统基础、依赖系统基础，或无法核验身份，保持只读',403)
+ except (ValueError,OSError,InventoryError):raise ApiError('服务属于系统基础、依赖系统基础，或无法核验身份，保持只读',403)
 
 class Grants:
  def __init__(self,control):self.control=control;self.path=control.root/'grants.json';self.catalog=lambda:collect_inventory(control.inventory_runner)['resources']
@@ -53,7 +53,12 @@ class Grants:
   row=self.entries().get(rid) or self.find(rid)
   # Empty overrides also narrow a grant supplied by config.json.
   with self.control.lock:
-   entries=self.entries();entries[rid]={k:row[k] for k in ('kind','target','name')}|{'identity':row.get('identity',row['target']),'rights':[]};save(self.path,entries);self.control._audit(owner,'grant-remove',rid)
+   entries=self.entries()
+   if rid in RESOURCES:
+    if rid not in entries and len(entries)>=128:raise ApiError('授权对象数量已达上限，请先撤销其他对象',429)
+    entries[rid]={k:row[k] for k in ('kind','target','name')}|{'identity':row.get('identity',row['target']),'rights':[]}
+   else:entries.pop(rid,None)
+   save(self.path,entries);self.control._audit(owner,'grant-remove',rid)
   return {'ok':True}
  def list(self,owner):
   self.control.require(owner,'admin');return {'grants':[dict(resource=rid,**entry) for rid,entry in self.entries().items()],'system_helper_ready':self.helper_ready()}

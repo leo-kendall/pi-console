@@ -20,6 +20,8 @@ from storage import Storage
 from files import Files
 from file_spaces import FileSpaces
 from file_api import dispatch as file_dispatch
+from live_logs import LiveLogs
+from observability_api import PATHS as OBSERVABILITY_PATHS, dispatch as observability_dispatch
 from health import report
 
 sys.dont_write_bytecode = True
@@ -63,6 +65,7 @@ class StatusCache:
 
 CACHE = StatusCache()
 CONTROL = None
+LIVE_LOGS = None
 PROCESSES = Processes()
 ALERTS = None
 STORAGE = Storage()
@@ -216,6 +219,8 @@ class Handler(socketserver.StreamRequestHandler):
                     if set(data)!={'resource','action','request'} or data['resource'] not in {k for k,v in __import__('control').RESOURCES.items() if v[1]=='system'} or data['action'] not in ('enable','disable'):raise ApiError('不允许的启动设置')
                     result=CONTROL.action(owner,data['resource'],data['action'],data['request'])
                 elif method=='GET' and path=='/api/health-report':result=report(TELEMETRY.history('60m')['points'])
+                elif method=='POST' and path in OBSERVABILITY_PATHS:
+                    result=observability_dispatch(path,data,owner,LIVE_LOGS,PROCESSES)
                 elif path.startswith('/api/files/'):
                     result=file_dispatch(method,path,data,owner,FILES,CONTROL)
                 elif method == "GET" and target.path == "/api/storage/scan":
@@ -321,11 +326,12 @@ class LocalServer(socketserver.ThreadingTCPServer):
 
 
 def main():
-    global CONTROL, DESKTOP, ALERTS, FILES, RESOURCE_END
+    global CONTROL, DESKTOP, ALERTS, FILES, RESOURCE_END, LIVE_LOGS
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, choices=range(1024,65536), default=18765)
     args = parser.parse_args()
     CONTROL = Control()
+    LIVE_LOGS = LiveLogs(CONTROL)
     RESOURCE_END = ResourceEnd(CONTROL,PROCESSES)
     DESKTOP = Desktop()
     FILES = FileSpaces(roots=SETTINGS['file_roots'])

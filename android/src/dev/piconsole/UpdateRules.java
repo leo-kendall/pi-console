@@ -5,6 +5,7 @@ import java.util.*;
 /** Pure policy shared by the downloader and Android installer boundary. */
 final class UpdateRules {
  static final long MAX_APK=134217728;
+ static boolean apkName(String name){return name!=null&&name.matches("pi-console(?:-release|-[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?)?\\.apk");}
  static URL url(String raw)throws Exception {
   URI u=new URI(raw);String h=u.getHost();
   if(raw.length()>4096||!"https".equals(u.getScheme())||u.getRawUserInfo()!=null||u.getFragment()!=null||(u.getPort()!=-1&&u.getPort()!=443)||h==null||!Arrays.asList("api.github.com","github.com","release-assets.githubusercontent.com","objects.githubusercontent.com").contains(h.toLowerCase(Locale.ROOT)))throw new IllegalArgumentException("更新地址必须为官方 GitHub HTTPS 资源");

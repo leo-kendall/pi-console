@@ -7,7 +7,7 @@ import os,shutil,subprocess,tempfile,xml.etree.ElementTree as ET,hashlib
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 def main():
- tools=Path(os.environ.get('PI_TEST_ANDROID_TOOLS','/home/ikun/pi-lab/console/tools'))
+ tools=Path(os.environ['PI_TEST_ANDROID_TOOLS']) if os.environ.get('PI_TEST_ANDROID_TOOLS') else None
  with tempfile.TemporaryDirectory(prefix='pi-client-build-') as tmp:
   stage=Path(tmp)/'source';stage.mkdir();(stage/'scripts').mkdir()
   for name in ['android','third_party']:shutil.copytree(ROOT/name,stage/name)
@@ -27,9 +27,11 @@ def main():
   for script in ['profiles-ui.js','updates-ui.js']:
    if 'src="'+script+'"' not in s:s=s.replace('</body>','<script src="'+script+'"></script></body>')
   html.write_text(s)
-  sdk=Path(tmp)/'sdk';(sdk/'platforms/android-35').mkdir(parents=True);(sdk/'platforms/android-35/android.jar').symlink_to(tools/'android-35/android.jar')
-  env=dict(os.environ,ANDROID_HOME=str(sdk),JAVA_HOME=str(tools/'root/usr/lib/jvm/java-21-openjdk-arm64'),PI_ANDROID_AAPT2=str(tools/'root/usr/lib/android-sdk/build-tools/debian/aapt2'),PI_ANDROID_ZIPALIGN=str(tools/'root/usr/lib/android-sdk/build-tools/debian/zipalign'),PI_ANDROID_D8_JAR=str(tools/'r8.jar'),PI_ANDROID_APKSIGNER_JAR=str(tools/'root/usr/share/java/apksigner-35.0.2.jar'),PI_ANDROID_RESOURCE_JAR=str(tools/'android-29/android.jar'))
-  env['LD_LIBRARY_PATH']=str(tools/'root/usr/lib/aarch64-linux-gnu')+':'+str(tools/'root/usr/lib/aarch64-linux-gnu/android')+':'+str(tools/'root/usr/lib/7zip')+':'+str(tools/'root/usr/lib')
+  env=dict(os.environ)
+  if tools is not None:
+   sdk=Path(tmp)/'sdk';(sdk/'platforms/android-35').mkdir(parents=True);(sdk/'platforms/android-35/android.jar').symlink_to(tools/'android-35/android.jar')
+   env=dict(os.environ,ANDROID_HOME=str(sdk),JAVA_HOME=str(tools/'root/usr/lib/jvm/java-21-openjdk-arm64'),PI_ANDROID_AAPT2=str(tools/'root/usr/lib/android-sdk/build-tools/debian/aapt2'),PI_ANDROID_ZIPALIGN=str(tools/'root/usr/lib/android-sdk/build-tools/debian/zipalign'),PI_ANDROID_D8_JAR=str(tools/'r8.jar'),PI_ANDROID_APKSIGNER_JAR=str(tools/'root/usr/share/java/apksigner-35.0.2.jar'),PI_ANDROID_RESOURCE_JAR=str(tools/'android-29/android.jar'))
+   env['LD_LIBRARY_PATH']=str(tools/'root/usr/lib/aarch64-linux-gnu')+':'+str(tools/'root/usr/lib/aarch64-linux-gnu/android')+':'+str(tools/'root/usr/lib/7zip')+':'+str(tools/'root/usr/lib')
   subprocess.run(['python3','-B','scripts/build_android.py'],cwd=stage,env=env,check=True)
   apk=stage/'build/pi-console-debug.apk';print('Disposable client full build: bytes='+str(apk.stat().st_size)+' sha256='+hashlib.sha256(apk.read_bytes()).hexdigest())
 if __name__=='__main__':main()

@@ -51,3 +51,5 @@ body.desktop-fullscreen{background:#08090b}
 .setup-check-target{font-size:12px;color:var(--muted);overflow-wrap:anywhere;margin:14px 0 0}
 
 .admin-card h3,.admin-card code,.admin-card p{overflow-wrap:anywhere;word-break:break-word}.admin-card select{max-width:100%}.admin-card button{min-height:48px}
+
+#server-profiles .profile-row{padding:12px 0;border-bottom:1px solid var(--line)}[data-modifier][aria-pressed=true]{background:var(--accent);color:white}

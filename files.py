@@ -3,7 +3,7 @@
 import base64,errno,hashlib,hmac,json,os,re,secrets,stat,threading,time
 from pathlib import Path
 from control import ApiError,save
-from safe_fs import SafeRoot,parts,fingerprint
+from safe_fs import SafeRoot,parts,fingerprint,rename_noreplace
 CHUNK=128*1024;MAX_FILE=8*1024**3;RESERVE=256*1024*1024
 class Files:
  def __init__(self,base=Path(__file__).resolve().parent/'data',root=None,writable=True):
@@ -163,7 +163,8 @@ class Files:
    try:os.stat(new_name,dir_fd=fd,follow_symlinks=False)
    except FileNotFoundError:pass
    else:raise ApiError('同名项目已存在',409)
-   os.rename(name,new_name,src_dir_fd=fd,dst_dir_fd=fd)
+   try:rename_noreplace(fd,name,fd,new_name)
+   except FileExistsError:raise ApiError('同名项目已存在，不会覆盖',409)
  def trash(self,owner,path,ticket):
   self.write_check()
   with self.lock,self.root.parent(path) as (fd,name),self.bin.directory() as dest:
@@ -174,8 +175,8 @@ class Files:
     try:os.rename(name,ident+'.bin',src_dir_fd=fd,dst_dir_fd=dest)
     except OSError as error:
      if error.errno!=errno.EXDEV:raise
-     self.publish(fd,name,dest,ident+'.bin');os.unlink(name,dir_fd=fd)
-   except OSError:(self.bin.root/(ident+'.json')).unlink(missing_ok=True);raise
+     raise ApiError('跨磁盘目录不支持移入回收区；原文件已保留',409)
+   except (OSError,ApiError):(self.bin.root/(ident+'.json')).unlink(missing_ok=True);raise
  def trash_list(self,owner):
   items=[]
   with self.lock:

@@ -10,8 +10,10 @@ from file_spaces import FileSpaces
 class ManagementApiTests(unittest.TestCase):
  def setUp(self):
   self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup);self.root=Path(self.temp.name)
-  self.previous={k:getattr(server,k) for k in ('CONTROL','DESKTOP','FILES')};self.addCleanup(self.restore)
+  self.previous={k:getattr(server,k) for k in ('CONTROL','DESKTOP','FILES','LIVE_LOGS')};self.addCleanup(self.restore)
   self.control=server.CONTROL=Control(self.root/'control',runner=lambda args: (_ for _ in ()).throw(AssertionError('No live commands allowed')))
+  from live_logs import LiveLogs
+  server.LIVE_LOGS=LiveLogs(self.control)
   server.DESKTOP=Desktop();external=self.root/'external';external.mkdir();(external/'sample.txt').write_text('read only')
   server.FILES=FileSpaces(self.root/'data',{'media':{'name':'媒体','path':str(external),'writable':False}})
   self.admin=self.pair('admin');self.viewer=self.pair('viewer');self.operator=self.pair('operator')
@@ -65,3 +67,11 @@ class ManagementApiTests(unittest.TestCase):
    if op['state'] not in ('queued','running'):break
    time.sleep(.01)
   self.assertEqual(op['state'],'success');self.assertEqual((self.root/'data/files/blocked.txt').read_bytes(),b'abcdef')
+ def test_live_logs_router_allows_viewers_but_rechecks_device_identity(self):
+  self.control.grants.catalog=lambda:[dict(id='found-log',kind='container',target='log',identity='d'*64,name='Log')]
+  self.control.grants.set(self.admin['device'],'found-log',['logs'],'d'*64)
+  self.control.runner=lambda args:'INFO isolated test\n'
+  self.assertEqual(self.call(self.viewer,'POST','/api/logs/tail',{'resource':'found-log'})[0],200)
+  self.control.revoke_device(self.admin['device'],self.viewer['device'])
+  self.assertEqual(self.call(self.viewer,'POST','/api/logs/tail',{'resource':'found-log'})[0],401)
+  self.assertEqual(self.call(self.admin,'POST','/api/processes/history',{'pid':'invalid','start':0})[0],400)

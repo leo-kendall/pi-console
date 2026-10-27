@@ -49,7 +49,16 @@ class MaintenanceTests(unittest.TestCase):
    if action=='start' and 'VERSION = 2' in calls[-1][1]:raise RuntimeError('new backend failed health check')
   with self.assertRaises(RuntimeError):m.upgrade(self.bundle(),runner=runner)
   self.assertEqual((self.root/'server.py').read_text(),'VERSION = 1\n')
-  self.assertEqual([a for a,_ in calls],['stop','start','start'])
+  self.assertEqual([a for a,_ in calls],['stop','start','stop','start'])
+ def test_unhealthy_running_candidate_is_stopped_before_source_rollback(self):
+  m=self.maintenance();running={'version':None}
+  def runner(action):
+   if action=='stop':running['version']=None
+   elif running['version'] is None:
+    running['version']=(self.root/'server.py').read_text()
+    if 'VERSION = 2' in running['version']:raise RuntimeError('health check failed with process still running')
+  with self.assertRaises(RuntimeError):m.upgrade(self.bundle(),runner=runner)
+  self.assertEqual(running['version'],'VERSION = 1\n')
  def test_rollback_refuses_changed_files_and_symlinked_paths_without_data_loss(self):
   m=self.maintenance();ident=m.upgrade(self.bundle())['backup'];(self.root/'server.py').write_text('USER_EDIT = True\n')
   with self.assertRaises(RuntimeError):m.rollback(ident)

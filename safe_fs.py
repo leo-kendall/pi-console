@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Directory-FD-relative filesystem access; no symlink traversal."""
-import os,re,stat
+import ctypes,os,re,stat
 from contextlib import contextmanager
 from pathlib import Path
 from control import ApiError
@@ -13,6 +13,14 @@ def parts(path,empty=False):
  return values
 
 def fingerprint(s):return [s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,stat.S_IFMT(s.st_mode)]
+def rename_noreplace(source,name,dest,new_name):
+ """Linux atomic no-clobber rename, including directories on external roots."""
+ libc=ctypes.CDLL(None,use_errno=True)
+ try:rename=libc.renameat2
+ except AttributeError:raise ApiError('系统不支持安全重命名；原文件已保留',503)
+ rename.argtypes=[ctypes.c_int,ctypes.c_char_p,ctypes.c_int,ctypes.c_char_p,ctypes.c_uint];rename.restype=ctypes.c_int
+ if rename(source,os.fsencode(name),dest,os.fsencode(new_name),1):
+  code=ctypes.get_errno();raise OSError(code,os.strerror(code))
 class SafeRoot:
  def __init__(self,root,create=True):
   self.root=Path(root)

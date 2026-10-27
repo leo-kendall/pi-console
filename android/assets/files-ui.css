@@ -1,0 +1,2 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+.file-row{display:flex;align-items:center;gap:8px;padding:8px;min-width:0}.file-row .file-open{margin:0;padding:8px;border:0;background:transparent;min-width:0;text-align:start;flex:1}.file-row b,.file-row small{overflow-wrap:anywhere}.file-select{width:22px;min-width:22px;height:22px;accent-color:var(--accent)}.file-buttons{display:flex;gap:6px;flex-wrap:wrap;align-items:center}#file-root{width:100%;min-width:0}#file-transfer-jobs .card{padding:12px}#file-transfer-jobs p{overflow-wrap:anywhere}

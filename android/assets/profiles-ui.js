@@ -1,0 +1,25 @@
+// SPDX-License-Identifier: Apache-2.0
+'use strict';
+(()=>{
+ const box=element('div',undefined,'card');box.id='server-profiles';
+ const title=element('h2','我的服务器'),note=element('p','最多保存 32 台 HTTPS 服务器；每台独立配对、应用入口和偏好。切换会断开桌面并停止持续监控。','footnote'),list=element('div'),error=element('p','','field-error'),add=element('button','添加服务器','text-button');add.id='add-profile';
+ const refresh=element('button','刷新列表','text-button');box.append(title,note,list,error,add,refresh);$('settings').prepend(box);
+ let profiles=[],current='',run=0,switching=false,settingsRun=0;
+ async function settings(){const sequence=++settingsRun;try{const p=await local('profileSettings');if(sequence!==settingsRun||p.profile!==current)return;const legacy=p.profile==='legacy';const theme=p.theme||(legacy?localStorage.getItem('theme'):'system')||'system',frequency=p.frequency||(legacy?Number(localStorage.getItem('frequency')):3000)||3000;localStorage.setItem('theme',theme);localStorage.setItem('frequency',String(frequency));$('frequency').value=String(frequency);setTheme();if(!p.theme&&current)await saveSettings();}catch(e){error.textContent=e.message;}}
+ async function saveSettings(){if(!current||switching)return;try{await local('saveProfileSettings',{profile:current,theme:$('theme').value,frequency:Number($('frequency').value)});}catch(e){error.textContent=e.message;}}
+ $('theme').addEventListener('change',saveSettings);$('frequency').addEventListener('change',saveSettings);
+ window.profilesConnectionChanged=connection=>{if(connection.profile!==undefined&&connection.profile!==current){current=connection.profile;settings();}if(paired)$('pair-copy').textContent='此服务器已配对。使用“我的服务器”添加或切换配置，各服务器凭证独立保存。';};
+ function render(){list.replaceChildren();for(const p of profiles){const row=element('div',undefined,'profile-row');row.dataset.profileId=p.id;row.append(element('h3',p.name+(p.active?' · 当前':'')),element('p',p.url,'footnote'),element('small',p.paired?'已配对':'未配对'));
+  const select=element('button',p.active?'当前服务器':'切换','text-button');select.dataset.profileSwitch=p.id;select.disabled=p.active||switching;select.onclick=()=>change(p.id,false);row.append(select);
+  const status=element('button','检查在线状态','text-button');status.dataset.profileStatus=p.id;status.onclick=async()=>{status.disabled=true;try{const reply=await local('profileStatus',p.id);if(row.isConnected)status.textContent=reply.online?'在线':'无法连接';}catch(e){error.textContent=e.message;}finally{status.disabled=false;}};row.append(status);
+  const rename=element('button','重命名','text-button');rename.onclick=()=>edit(p);row.append(rename);
+  const remove=element('button','移除本机配置','text-button danger-text');remove.onclick=()=>{const b=sheet('移除 '+p.name+'？');b.append(element('p','仅删除此手机保存的地址、配对和应用入口，不会在服务器撤销设备授权。若要撤销，请先切换到此服务器并使用“撤销配对”。'));const confirm=element('button','移除本机配置','primary');b.append(confirm);confirm.onclick=()=>change(p.id,true);};row.append(remove);list.append(row);}
+  if(!profiles.length)list.append(element('p','先使用下方连接向导保存第一台服务器，或点击添加。','intro'));add.disabled=profiles.length>=32||switching;
+ }
+ window.loadProfiles=async()=>{const sequence=++run;try{const out=await local('profiles');if(sequence!==run)return;profiles=out.profiles||[];current=out.active||'';render();await settings();}catch(e){error.textContent=e.message;}};
+ async function change(id,remove){if(switching)return;switching=true;error.textContent='';let resume=false;try{resume=prepareProfileSwitch();const out=await local(remove?'removeProfile':'switchProfile',id);profiles=out.profiles;current=out.active;settingsRun++;$('sheet').close();await settings();await checkPaired();render();toast(remove?'本机配置已移除；未向服务器发送撤销请求':'已切换服务器；持续监控可按需重新开启');}catch(e){error.textContent=e.message;await checkPaired();}finally{switching=false;render();if(resume)resumeApp();}}
+ function edit(profile){const b=sheet(profile?'重命名服务器':'添加服务器'),name=element('input');name.id='profile-name';name.maxLength=64;name.value=profile?.name||'';name.setAttribute('aria-label','服务器名称');b.append(element('label','名称','field-label'),name);let url;if(!profile){url=element('input');url.id='profile-url';url.type='url';url.maxLength=2048;url.placeholder='https://server.example/api-prefix';url.setAttribute('aria-label','HTTPS 服务器地址');b.append(element('label','HTTPS 地址','field-label'),url,element('p','新配置尚未配对；添加后切换到它，使用对应服务器生成的配对码。','footnote'));}const note=element('p','','field-error'),save=element('button','保存','primary');save.id='profile-save';b.append(note,save);save.onclick=async()=>{save.disabled=true;try{if(profile)await local('renameProfile',{id:profile.id,name:name.value.trim()});else await local('addProfile',{name:name.value.trim(),url:url.value.trim()});$('sheet').close();await loadProfiles();}catch(e){note.textContent=e.message;}finally{save.disabled=false;}};}
+ add.onclick=()=>edit(null);refresh.onclick=loadProfiles;
+ document.querySelector('[data-page="settings"]').addEventListener('click',loadProfiles);
+ loadProfiles();
+})();

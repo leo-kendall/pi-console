@@ -24,7 +24,7 @@ public final class ServerSettingsTest {
   ServerSettings.Snapshot beforeForget=ServerSettings.snapshot(c);ServerSettings.forget(c);
   rejected(()->ServerSettings.pair(c,beforeForget,"pair-after-forget"));
   check(!ServerSettings.paired(c));ServerSettings.pair(c,ServerSettings.snapshot(c),"fresh-A");check(ServerSettings.paired(c));
-  c.getSharedPreferences("paired",0).edit().putString("server","https://other.example.test").commit();check(ServerSettings.snapshot(c).token.isEmpty());
+  c.getSharedPreferences("paired-"+ServerSettings.activeId(c),0).edit().putString("server","https://other.example.test").commit();check(ServerSettings.snapshot(c).token.isEmpty());
   check(ServerSettings.paired(other));
   System.out.println("Fresh-install defaults, independent preferences, server switch, immutable request routing, stale pairing and forget cancellation tests passed");
  }

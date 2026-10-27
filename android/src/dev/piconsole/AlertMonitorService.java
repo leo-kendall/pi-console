@@ -15,6 +15,7 @@ public final class AlertMonitorService extends Service {
  private NotificationManager manager;
  private int failures=0;
  private boolean offline=false;
+ private ServerSettings.Snapshot session;
  private volatile boolean stopped=false;
  private static final int STATUS=4100;
  static JSONObject state(Context c)throws Exception {
@@ -35,26 +36,27 @@ public final class AlertMonitorService extends Service {
   if(intent!=null&&"stop".equals(intent.getAction())){getSharedPreferences("monitor",0).edit().putBoolean("enabled",false).apply();stopSelf();return START_NOT_STICKY;}
   if(!getSharedPreferences("monitor",0).getBoolean("enabled",false)){stopSelf();return START_NOT_STICKY;}
   if(Build.VERSION.SDK_INT>=29)startForeground(STATUS,status("每分钟检查 · 使用已配置的服务器地址"),ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);else startForeground(STATUS,status("每分钟检查 · 使用已配置的服务器地址"));
+  try{session=ServerSettings.snapshot(this);}catch(Exception invalid){stopSelf();return START_NOT_STICKY;}
   running=true;
   if(executor==null){executor=Executors.newSingleThreadScheduledExecutor();executor.scheduleWithFixedDelay(this::poll,0,60,TimeUnit.SECONDS);}
   return START_NOT_STICKY;
  }
- private void notifyAlert(int id,String title,String message){if(stopped)return;manager.notify(id,new Notification.Builder(this,"pi-alerts").setSmallIcon(android.R.drawable.ic_dialog_alert).setContentTitle(title).setContentText(message).setStyle(new Notification.BigTextStyle().bigText(message)).setContentIntent(open()).setAutoCancel(true).build());}
+ private void notifyAlert(int id,String title,String message){try{if(stopped||session==null||!ServerSettings.current(this,session)||!NotificationSettings.deliver(this,"active",false))return;}catch(Exception e){return;}manager.notify(id,new Notification.Builder(this,"pi-alerts").setSmallIcon(android.R.drawable.ic_dialog_alert).setContentTitle(title).setContentText(message).setStyle(new Notification.BigTextStyle().bigText(message)).setContentIntent(open()).setAutoCancel(true).build());}
  private void poll(){
+  final ServerSettings.Snapshot request=session;
   try{
-   String token=SecretStore.read(this);if(token.isEmpty()){new Handler(getMainLooper()).post(()->AlertMonitorService.stop(this));return;}
-   JSONObject data=new JSONObject(StatusClient.request(this,"GET","/api/alerts",""));if(stopped)return;
+   if(request==null||!ServerSettings.current(this,request)||request.token.isEmpty()){new Handler(getMainLooper()).post(()->AlertMonitorService.stop(this));return;}
+   JSONObject data=new JSONObject(StatusClient.request(request,"GET","/api/alerts",""));if(stopped||!ServerSettings.current(this,request))return;
    if(AlertDelivery.stale(data.optDouble("sampled_at",Double.NaN),System.currentTimeMillis()/1000.0))throw new java.io.IOException("监控采样已过期");
-   if(offline)notifyAlert(4200,"服务器监控已恢复","已重新连接，异常监控继续运行");offline=false;failures=0;
-   android.content.SharedPreferences prefs=getSharedPreferences("monitor",0);
+   if(offline&&NotificationSettings.deliver(this,"resolved",true))notifyAlert(4200,"服务器监控已恢复","已重新连接，异常监控继续运行");offline=false;failures=0;
+   android.content.SharedPreferences prefs=getSharedPreferences("monitor-"+request.profile,0);
    Set<String> seen=new HashSet<>(prefs.getStringSet("seen",Collections.emptySet()));
-   JSONArray events=data.getJSONArray("events"),active=data.getJSONArray("active");List<String> historyIds=new ArrayList<>(),activeIds=new ArrayList<>();Map<String,JSONObject> byId=new LinkedHashMap<>();
+   JSONArray events=data.getJSONArray("events"),active=data.getJSONArray("active");List<String> historyIds=new ArrayList<>();Map<String,JSONObject> byId=new LinkedHashMap<>();
    for(int i=0;i<events.length();i++){JSONObject e=events.getJSONObject(i);String id=e.getString("id");historyIds.add(id);byId.put(id,e);}
-   for(int i=0;i<active.length();i++){JSONObject e=active.getJSONObject(i);String id=e.getString("id");activeIds.add(id);byId.put(id,e);}
-   Set<String> retained=AlertDelivery.candidates(historyIds,activeIds);long since=prefs.getLong("started",System.currentTimeMillis())/1000-120;
+   Set<String> retained=new HashSet<>(historyIds);long since=getSharedPreferences("monitor",0).getLong("started",System.currentTimeMillis())/1000;
    for(String id:AlertDelivery.unseen(retained,seen)){
-    JSONObject e=byId.get(id);
-    if(e.getLong("time")>=since||activeIds.contains(id))notifyAlert(4300+Math.floorMod(e.getString("key").hashCode(),100000),e.getString("title"),e.getString("message"));
+    JSONObject e=byId.get(id);String state=e.optString("state","active");
+    if(e.getLong("time")>=since&&NotificationSettings.deliver(this,state,e.optBoolean("recovered",false)))notifyAlert(4300+Math.floorMod(e.getString("key").hashCode(),100000),e.getString("title"),e.getString("message"));
    }
    prefs.edit().putStringSet("seen",new HashSet<>(retained)).apply();
    if(!stopped)manager.notify(STATUS,status("连接正常 · "+active.length()+" 项当前异常 · 每分钟检查"));

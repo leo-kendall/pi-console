@@ -19,7 +19,7 @@ final class AppStore {
     }
 
     private final SharedPreferences preferences;
-    AppStore(Context context) { preferences = context.getSharedPreferences("app_entries", Context.MODE_PRIVATE); }
+    AppStore(Context context) { try { preferences = context.getSharedPreferences("app_entries-"+ServerSettings.activeId(context), Context.MODE_PRIVATE); } catch(Exception e) {throw new IllegalStateException(e);} }
 
     List<Entry> load() {
         List<Entry> entries = new ArrayList<>();

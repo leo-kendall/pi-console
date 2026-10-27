@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 'use strict';
 (function(){
+ if(window.Observability)return;
  const finite=v=>typeof v==='number'&&Number.isFinite(v), titles={temperature:'温度',cpu:'CPU 使用率',memory:'内存使用率',rx:'网络接收',tx:'网络发送',cpu_percent:'进程 CPU',rss_bytes:'进程内存 RSS'};
  function series(points,metric,iface){return points.filter(p=>finite(p.time)).map(p=>{let value=metric==='rx'||metric==='tx'?p.network?.[iface]?.[metric]:p[metric];return {time:p.time,value:finite(value)&&(metric==='temperature'||value>=0)?value:null};});}
  function segments(points){const result=[];let run=null,previous=null;for(const p of points){if(p.value===null){run=null;previous=null;continue;}if(!run||p.time-previous>12||p.time<=previous){run=[];result.push(run);}run.push(p);previous=p.time;}return result;}
@@ -24,21 +25,24 @@
   search.type='search';search.placeholder='搜索已获取日志';search.setAttribute('aria-label','搜索日志');search.id='log-search';level.id='log-level';level.setAttribute('aria-label','日志级别');
   for(const [value,title]of[['all','所有级别'],['error','错误'],['warning','警告'],['info','信息'],['debug','调试']]){const option=element('option',title);option.value=value;level.append(option);}
   pause.id='log-pause';copy.id='log-copy';save.id='log-export';pre.id='log-rows';note.id='log-status';const controls=element('div',undefined,'observability-controls');controls.append(pause,copy,save);marker.append(search,level,controls,note,pre,element('p','每 2 秒检查一次，仅保留最近约 64 Ki 字符。级别按文本关键字识别；轮转或窗口丢失会重新载入。','footnote'));box.append(marker);
-  const s=logSession={box,marker,endpoint:serverKey(),page,generation,rows:[],cursor:null,paused:false,loading:false,stopped:false,legacy:false};
+  const s=logSession={box,marker,endpoint:serverKey(),page,generation,rows:[],cursor:null,paused:false,loading:false,stopped:false,legacy:false,pending:null,lastPoll:0};
   const visible=()=>filterLines(s.rows,search.value,level.value);
   const render=()=>{pre.textContent=visible().join('\n')||'暂无匹配日志';copy.disabled=save.disabled=!visible().length;};search.oninput=level.onchange=render;
-  pause.onclick=()=>{s.paused=!s.paused;pause.textContent=s.paused?'继续':'暂停';clearTimeout(s.timer);note.textContent=s.paused?'已暂停；搜索、复制和导出仍可用':'继续检查日志';if(!s.paused)poll();};
+  pause.onclick=()=>{s.paused=!s.paused;pause.textContent=s.paused?'继续':'暂停';clearTimeout(s.timer);note.textContent=s.paused?'已暂停；搜索、复制和导出仍可用':'继续检查日志';if(!s.paused){if(s.pending){const data=s.pending;s.pending=null;applyData(data);}if(!s.paused)s.timer=setTimeout(poll,Math.max(0,2000-(Date.now()-s.lastPoll)));}};
   const capture=()=>({name:'logs-'+String(resource.id).replace(/[^A-Za-z0-9_-]/g,'_').slice(0,100)+'.txt',text:visible().join('\n')});
   copy.onclick=async()=>{if(s.endpoint!==serverKey())return;try{await local('logsCopy',{text:capture().text});toast('已复制筛选结果');}catch(e){toast(e.message);}};
   save.onclick=async()=>{if(s.endpoint!==serverKey())return;try{await local('logsExport',capture());toast('请选择保存位置');}catch(e){toast(e.message);}};
-  async function poll(){
-   if(!usable(s)||s.paused||s.loading)return;s.loading=true;
-   try{const data=s.legacy?await api('/api/logs/'+encodeURIComponent(resource.id)):await api('/api/logs/tail',{resource:resource.id,cursor:s.cursor});if(!usable(s))return;
+  function applyData(data){
     if(s.legacy){s.rows=mergeLines([],{reset:true,lines:String(data.text||'').split(/\r?\n/)});s.paused=true;pause.disabled=true;note.textContent='此后端仅支持日志快照；升级后可持续跟随';}
     else {s.rows=mergeLines(s.rows,data);s.cursor=data.cursor;note.textContent=(s.paused?'已暂停 · ':'跟随中 · ')+(data.reset?'已载入最新窗口 · ':'')+s.rows.length+' 行 · '+new Date(data.sampled_at*1000).toLocaleTimeString('zh-CN',{hour12:false});}
     render();
+  }
+  async function poll(){
+   if(!usable(s)||s.paused||s.loading)return;s.loading=true;s.lastPoll=Date.now();
+   try{const data=s.legacy?await api('/api/logs/'+encodeURIComponent(resource.id)):await api('/api/logs/tail',{resource:resource.id,cursor:s.cursor});if(!usable(s))return;
+    if(s.paused)s.pending=data;else applyData(data);
    }catch(e){if(!usable(s))return;const message=String(e.message);if(!s.legacy&&/404|接口不存在|不支持|not found/i.test(message)){s.legacy=true;}else{note.textContent=message+'；已保留读到的日志';if(/403|未授权|无权限|denied|不允许/i.test(message)){s.paused=true;pause.textContent='继续';}}}
-   finally{s.loading=false;if(usable(s)&&!s.paused)s.timer=setTimeout(poll,2000);}
+   finally{s.loading=false;if(usable(s)&&!s.paused){clearTimeout(s.timer);s.timer=setTimeout(poll,2000);}}
   }
   render();poll();return s;
  };
@@ -60,7 +64,11 @@
  const detail=window.showProcessDetail;
  if(detail)window.showProcessDetail=async function(pid){
   stopObservability();const epoch=generation,key=serverKey();await detail(pid);if(epoch!==generation||key!==serverKey()||!$('sheet').open||!$('sheet-content').querySelector('.process-facts'))return;
-  const p=processData?.processes.find(p=>p.pid===pid);if(!p)return;const box=$('sheet-content'),marker=element('div',undefined,'process-history'),select=element('select'),canvas=element('canvas'),readout=element('p','正在积累历史…','footnote'),note=element('p','仅在查看此进程时积累最多 15 分钟历史；CPU 单核 100%。','footnote');select.id='process-history-metric';select.setAttribute('aria-label','进程历史指标');for(const k of['cpu_percent','rss_bytes']){const o=element('option',titles[k]);o.value=k;select.append(o);}canvas.id='process-history-chart';canvas.setAttribute('aria-label','进程历史趋势');canvas.tabIndex=0;marker.append(element('h3','进程历史'),select,canvas,readout,note);box.append(marker);
+  const p=processData?.processes.find(p=>p.pid===pid);if(p)attachProcessHistory($('sheet-content'),p);
+ };
+ window.attachProcessHistory=function(box,p){
+  if(!box.isConnected||!$('sheet').open||box.querySelector('.process-history'))return;
+  const key=serverKey(),marker=element('div',undefined,'process-history'),select=element('select'),canvas=element('canvas'),readout=element('p','正在积累历史…','footnote'),note=element('p','仅在查看此进程时积累最多 15 分钟历史；CPU 单核 100%。','footnote');select.id='process-history-metric';select.setAttribute('aria-label','进程历史指标');for(const k of['cpu_percent','rss_bytes']){const o=element('option',titles[k]);o.value=k;select.append(o);}canvas.id='process-history-chart';canvas.setAttribute('aria-label','进程历史趋势');canvas.tabIndex=0;marker.append(element('h3','进程历史'),select,canvas,readout,note);box.append(marker);
   const s=processSession={box,marker,endpoint:key,page,generation,rows:[],index:-1,stopped:false};const render=()=>draw(canvas,s.rows,select.value,'',readout,s.index);select.onchange=()=>{s.index=-1;render();};canvas.onpointerdown=e=>{const rect=canvas.getBoundingClientRect();s.index=Math.round(Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width))*(s.rows.length-1));render();};canvas.onkeydown=e=>{if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();s.index=Math.max(0,Math.min(s.rows.length-1,(s.index<0?s.rows.length-1:s.index)+(e.key==='ArrowLeft'?-1:1)));render();}};
   async function poll(){if(!usable(s))return;try{const data=await api('/api/processes/history',{pid:p.pid,start:p.start});if(!usable(s))return;s.rows=data.points;render();if(data.ended){note.textContent='进程已退出，保留已采集历史';s.stopped=true;}}catch(e){if(usable(s)){note.textContent=e.message+'；历史已保留';if(/409|404|变化|退出|不存在/.test(e.message))s.stopped=true;}}finally{if(usable(s))s.timer=setTimeout(poll,3000);}}
   poll();

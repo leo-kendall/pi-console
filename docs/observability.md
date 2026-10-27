@@ -2,6 +2,8 @@
 
 Open a granted service or container's logs to follow its most recent tail. The app checks every two seconds while that dialog is open. Pause keeps the fetched rows available for search, level filtering, copy, and export. Search and export cover only the retained rows; they do not download an entire journal. Levels use keywords in the text rather than a structured journal severity field. Export opens Android's document picker, and copied/exported text can include private application data.
 
+If a request finishes during pause, its bounded result waits until resume so the visible selection stays frozen and its cursor remains valid. Resuming respects the poll interval. Closing the dialog, leaving the page, backgrounding the app, or switching server stops follow and rejects late replies.
+
 The server limits a response to 256 rows and 64 KiB of UTF-8 data. The app retains up to 1,000 rows and about 64 Ki UTF-16 characters. A reset replaces the window after rotation, truncation, restart, expiration, or loss of overlap. The underlying snapshot command does not supply stable record IDs, so a byte-identical replacement is indistinguishable from an unchanged tail. No continuous subprocess is started. Older backends fall back to a single snapshot with an upgrade message.
 
 Select temperature, CPU, memory, receive rate, or send rate above the overview chart. Network history uses the selected interface and bytes per second. Missing or delayed samples leave gaps. Tap, drag, or use the chart's arrow keys to inspect a sample. History is held in memory by the server; a restart clears it. The overview retains about one hour at three-second intervals.
@@ -22,6 +24,6 @@ Existing four-field alert rules and stored files remain accepted. Saving rules f
 
 `observability_api.dispatch(path,data,owner,logs,processes)` implements both request contracts. It assumes the shared router authenticates and enforces roles before calling it.
 
-Load `observability-ui.js` after `process-ui.js` and `tools-ui.js`, and include `observability.css`. Call `stopObservability()` when changing pages, pausing the app, or switching profiles; call `observabilityConnectionChanged(url,paired)` when the active connection changes. The module also checks endpoint, dialog, page, and foreground identity before applying replies or issuing another poll.
+Load `observability-ui.js` after `process-ui.js` and `tools-ui.js`, and include `observability.css`. Call `stopObservability()` when changing pages, pausing the app, or switching profiles; call `observabilityConnectionChanged(url,paired)` when the active connection changes. After rendering an authoritative process detail response, call `attachProcessHistory(box,p)` with that response's exact PID/start identity. The module also checks endpoint, dialog, page, and foreground identity before applying replies or issuing another poll.
 
 Native actions are `logsCopy` with `{text}`, `logsExport` with `{name,text}` (UTF-8 text, bounded to 256 KiB, Android SAF destination), and `notificationSettings` to read or save `{schema:1,enabled,recovery,quiet_start,quiet_end}`. Time fields use `HH:mm`. Unsupported native clients may return `{available:false}`. Log export accepts data only, never a backend filesystem path.

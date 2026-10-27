@@ -48,7 +48,9 @@ class Grants:
    entries[rid]=entry;save(self.path,entries);self.control._audit(owner,'grant-set',rid)
   return {'ok':True,'resource':rid,'rights':entry['rights'],'requires_helper':row['kind']=='system' and not self.helper_ready()}
  def remove(self,owner,rid):
-  self.control.require(owner,'admin');row=self.find(rid)
+  self.control.require(owner,'admin')
+  if not isinstance(rid,str) or not re.fullmatch('[a-zA-Z0-9-]{1,64}',rid):raise ApiError('无效授权对象')
+  row=self.entries().get(rid) or self.find(rid)
   # Empty overrides also narrow a grant supplied by config.json.
   with self.control.lock:
    entries=self.entries();entries[rid]={k:row[k] for k in ('kind','target','name')}|{'identity':row.get('identity',row['target']),'rights':[]};save(self.path,entries);self.control._audit(owner,'grant-remove',rid)

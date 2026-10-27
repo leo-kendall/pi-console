@@ -19,7 +19,7 @@ function renderResources(){
   card.append(element('p',r.impact));
   const actions=element('div',undefined,'actions');
   for(const [action,label] of [['start','启动'],['stop','停止'],['restart','重启'],['logs','日志']]){
-   const button=element('button',label);button.disabled=action==='logs'?!r.logs:!r.control;
+   const button=element('button',label);button.disabled=action==='logs'?!r.logs:!r.control||(Array.isArray(r.allowed_actions)&&!r.allowed_actions.includes(action));
    button.onclick=()=>action==='logs'?showLogs(r):confirmAction(r,action,label);actions.append(button);
   }
   card.append(actions);

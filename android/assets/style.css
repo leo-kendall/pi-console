@@ -49,3 +49,5 @@ body.desktop-fullscreen{background:#08090b}
 #resource-search{display:block;width:100%;margin-top:12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--text)}.resource-card{min-width:0;overflow-wrap:anywhere}.resource-card small{display:block;overflow-wrap:anywhere}.resource-card .resource-heading{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start}.resource-card .resource-heading h3{min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.5}.resource-heading .badge{align-self:start;margin-top:2px}
 
 .setup-check-target{font-size:12px;color:var(--muted);overflow-wrap:anywhere;margin:14px 0 0}
+
+.admin-card h3,.admin-card code,.admin-card p{overflow-wrap:anywhere;word-break:break-word}.admin-card select{max-width:100%}.admin-card button{min-height:48px}

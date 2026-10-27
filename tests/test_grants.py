@@ -35,3 +35,8 @@ class GrantTests(unittest.TestCase):
   self.c.grants.set(self.admin,'found-photo',['stop'],'a'*64)
   result=self.c.grants.apply({'resources':self.rows})['resources'][0]
   self.assertTrue(result['control']);self.assertEqual(result['allowed_actions'],['stop']);self.assertFalse(result['logs'])
+ def test_stale_grant_can_be_revoked_after_resource_disappears(self):
+  self.c.grants.set(self.admin,'found-photo',['stop'],'a'*64)
+  self.rows=[]
+  self.c.grants.remove(self.admin,'found-photo')
+  self.assertEqual(self.c.grants.entries()['found-photo']['rights'],[])

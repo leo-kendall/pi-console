@@ -50,7 +50,7 @@ public final class MainActivity extends Activity {
     String url=r.getUrl().toString();
     if(!url.startsWith(origin))return blocked();
     String name=url.substring(origin.length());
-    if(!Arrays.asList("index.html","style.css","app.js","app-state.js","setup-ui.js","resources-ui.js","process-ui.js","tools-ui.js","files-ui.js","guacamole.js","desktop-layout.js","desktop-diagnostics.js","desktop-ui.js","profiles-ui.js","updates-ui.js","admin-ui.js","observability-ui.js","observability.css").contains(name))return blocked();
+    if(!Arrays.asList("index.html","style.css","app.js","app-state.js","setup-ui.js","resources-ui.js","process-ui.js","tools-ui.js","files-ui.js","guacamole.js","desktop-layout.js","desktop-diagnostics.js","desktop-ui.js","profiles-ui.js","updates-ui.js","admin-ui.js","observability-ui.js","observability.css","files-ui.css").contains(name))return blocked();
     try {
      String mime=name.endsWith(".html")?"text/html":name.endsWith(".css")?"text/css":"application/javascript";
      Map<String,String> headers=new HashMap<>();headers.put("Content-Security-Policy","default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data: blob:; media-src data: blob:; connect-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'");
@@ -82,6 +82,7 @@ public final class MainActivity extends Activity {
  final class Bridge {
   @JavascriptInterface public void request(String id,String method,String path,String body){
    if(!id.matches("[0-9]{1,12}")||!(method.equals("GET")||method.equals("POST"))||!path.matches("/api/[a-zA-Z0-9/?=&-]{1,160}")||body.length()>262144){result(id,null,"无效请求");return;}
+   if(path.equals("/api/unpair")&&(files.busy()||backup.busy())){result(id,null,"请先暂停文件传输并完成文件选择或备份，再撤销配对");return;}
    if(pending.incrementAndGet()>12){pending.decrementAndGet();result(id,null,"请求过多，请稍候");return;}
    final ServerSettings.Snapshot session;
    try{session=ServerSettings.snapshot(MainActivity.this);}catch(Exception e){pending.decrementAndGet();result(id,null,e.getMessage());return;}
@@ -118,6 +119,7 @@ public final class MainActivity extends Activity {
     else if(action.equals("renameProfile")){JSONObject p=new JSONObject(value);ServerSettings.rename(MainActivity.this,p.getString("id"),p.getString("name"));out.put("ok",true);}
     else if(action.equals("switchProfile")||action.equals("removeProfile")){
      if(files.busy()||backup.busy())throw new Exception("请等待文件选择、传输或备份任务结束");
+     if(action.equals("removeProfile"))TransferService.discardProfile(MainActivity.this,value);
      AlertMonitorService.stop(MainActivity.this);desktopInput.setSession("");
      if(action.equals("switchProfile"))ServerSettings.activate(MainActivity.this,value);else ServerSettings.remove(MainActivity.this,value);
      out=ProfileBridge.list(MainActivity.this);
@@ -130,7 +132,7 @@ public final class MainActivity extends Activity {
     else if(action.equals("logsCopy")){String text=new JSONObject(value).getString("text");TextExport.validate("logs.txt",text);android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);cm.setPrimaryClip(android.content.ClipData.newPlainText("服务器日志",text));out.put("ok",true);}
     else if(action.equals("notificationSettings"))out=NotificationSettings.access(MainActivity.this,value);
     else if(action.equals("serverSettings")){out.put("url",ServerSettings.url(MainActivity.this));out.put("paired",ServerSettings.paired(MainActivity.this));out.put("profile",ServerSettings.activeId(MainActivity.this));}
-    else if(action.equals("saveServer")){if(pending.get()>0||files.busy()||backup.busy())throw new Exception("请等待当前请求或文件操作结束");ServerSettings.set(MainActivity.this,value);out.put("url",ServerSettings.url(MainActivity.this));}
+    else if(action.equals("saveServer")){if(pending.get()>0||files.busy()||backup.busy())throw new Exception("请等待当前请求或文件操作结束");if(!ServerSettings.activeId(MainActivity.this).isEmpty()&&!ServerEndpoint.parse(value).canonical.equals(ServerSettings.url(MainActivity.this)))TransferService.store(MainActivity.this).requireProfileEmpty(ServerSettings.activeId(MainActivity.this));ServerSettings.set(MainActivity.this,value);out.put("url",ServerSettings.url(MainActivity.this));}
     else if(action.equals("paired"))out.put("paired",ServerSettings.paired(MainActivity.this));
     else if(action.equals("desktopProbe")){DesktopProbe.capture(MainActivity.this,web,new JSONObject(value),data->result(id,data,null));return;}
     else if(action.equals("desktopRepaint")){web.requestLayout();web.postInvalidateOnAnimation();out.put("ok",true);}
@@ -152,12 +154,13 @@ public final class MainActivity extends Activity {
     else if(action.equals("desktopClipboardRead"))out=desktopInput.readClipboard();
     else if(action.equals("desktopClipboardWrite"))out=desktopInput.writeClipboard(value);
     else if(action.equals("desktopFullscreen")){if(!value.equals("true")&&!value.equals("false"))throw new Exception("无效全屏参数");setDesktopFullscreen(value.equals("true"));out.put("ok",true);}
-    else if(action.equals("fileUpload")){if(backup.busy())throw new Exception("已有备份任务进行中");files.upload(new JSONObject(value).getString("directory"));out.put("started",true);}
+    else if(action.equals("fileUpload")){if(backup.busy())throw new Exception("已有备份任务进行中");files.upload(new JSONObject(value));out.put("started",true);}
     else if(action.equals("fileDownload")){if(backup.busy())throw new Exception("已有备份任务进行中");files.download(new JSONObject(value));out.put("started",true);}
     else if(action.equals("backupExport")){if(files.state().getBoolean("busy"))throw new Exception("已有文件任务进行中");backup.exportSettings(new JSONObject(value));out.put("started",true);}
     else if(action.equals("backupImport")){if(files.state().getBoolean("busy"))throw new Exception("已有文件任务进行中");backup.importSettings();out.put("started",true);}
     else if(action.equals("backupApply")){backup.apply();out.put("started",true);}
     else if(action.equals("transferState"))out=files.state();
+    else if(action.equals("transferPause")||action.equals("transferResume")||action.equals("transferCancel")||action.equals("transferDiscard")){JSONObject command=new JSONObject(value);if(command.length()!=1||!command.has("id"))throw new Exception("无效传输操作");files.command(command.getString("id"),action.substring(8).toLowerCase(java.util.Locale.ROOT));out.put("ok",true);}
     else if(action.equals("monitorState"))out=AlertMonitorService.state(MainActivity.this);
     else if(action.equals("monitorStop")){AlertMonitorService.stop(MainActivity.this);out=AlertMonitorService.state(MainActivity.this);}
     else if(action.equals("monitorStart")){
@@ -167,7 +170,7 @@ public final class MainActivity extends Activity {
      getSharedPreferences("monitor",0).edit().putBoolean("enabled",true).putLong("started",System.currentTimeMillis()).apply();startForegroundService(new Intent(MainActivity.this,AlertMonitorService.class));out.put("starting",true);
     }
     else if(action.equals("exit")){finish();out.put("ok",true);}
-    else if(action.equals("forget")){AlertMonitorService.stop(MainActivity.this);ServerSettings.forget(MainActivity.this);out.put("ok",true);}
+    else if(action.equals("forget")){if(files.busy()||backup.busy())throw new Exception("请先暂停文件传输并完成文件选择或备份，再移除配对");AlertMonitorService.stop(MainActivity.this);ServerSettings.forget(MainActivity.this);out.put("ok",true);}
     else if(action.equals("apps")){
      JSONArray a=new JSONArray();for(AppStore.Entry e:store.load())a.put(new JSONObject().put("name",e.name).put("url",e.url).put("inline",e.inline));out.put("apps",a);
     }else if(action.equals("saveApps")){

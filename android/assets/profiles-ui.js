@@ -13,7 +13,7 @@
   const select=element('button',p.active?'当前服务器':'切换','text-button');select.dataset.profileSwitch=p.id;select.disabled=p.active||switching;select.onclick=()=>change(p.id,false);row.append(select);
   const status=element('button','检查在线状态','text-button');status.dataset.profileStatus=p.id;status.onclick=async()=>{status.disabled=true;try{const reply=await local('profileStatus',p.id);if(row.isConnected)status.textContent=reply.online?'在线':'无法连接';}catch(e){error.textContent=e.message;}finally{status.disabled=false;}};row.append(status);
   const rename=element('button','重命名','text-button');rename.onclick=()=>edit(p);row.append(rename);
-  const remove=element('button','移除本机配置','text-button danger-text');remove.onclick=()=>{const b=sheet('移除 '+p.name+'？');b.append(element('p','仅删除此手机保存的地址、配对和应用入口，不会在服务器撤销设备授权。若要撤销，请先切换到此服务器并使用“撤销配对”。'));const confirm=element('button','移除本机配置','primary');b.append(confirm);confirm.onclick=()=>change(p.id,true);};row.append(remove);list.append(row);}
+  const remove=element('button','移除本机配置','text-button danger-text');remove.onclick=()=>{const b=sheet('移除 '+p.name+'？');b.append(element('p','将删除此手机保存的地址、配对、应用入口及此服务器的暂停任务、传输历史和暂存文件；不会撤销服务器已接收的上传或设备授权。发布结果未知时请先核实服务器文件。正在传输时需先暂停。'));const confirm=element('button','移除本机配置','primary');b.append(confirm);confirm.onclick=()=>change(p.id,true);};row.append(remove);list.append(row);}
   if(!profiles.length)list.append(element('p','先使用下方连接向导保存第一台服务器，或点击添加。','intro'));add.disabled=profiles.length>=32||switching;
  }
  window.loadProfiles=async()=>{const sequence=++run;try{const out=await local('profiles');if(sequence!==run)return;profiles=out.profiles||[];current=out.active||'';render();await settings();}catch(e){error.textContent=e.message;}};

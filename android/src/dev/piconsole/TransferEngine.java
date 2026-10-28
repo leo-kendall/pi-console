@@ -7,6 +7,7 @@ import java.util.*;
 /** Bounded streaming protocol. Host owns persistence/SAF, Remote owns captured transport. */
 final class TransferEngine {
  static final int CHUNK=128*1024;static final long MAX_BYTES=8L*1024*1024*1024;
+ static final class RateLimited extends IOException {RateLimited(){super("服务器操作限流，请稍后继续核实原任务");}}
  static final class Job {
   final String id,kind;final long size;
   String profile="",server="",root="default",uri="",grantUri="",name="",directory="",path="",ticket="",uploadId="",sha256="",actionId="";
@@ -50,7 +51,13 @@ final class TransferEngine {
    j.sha256=hex(hash.digest());host.save(j);
   }
   host.check(j);j.status="verifying";j.message="正在核实服务器发布结果";host.save(j);
-  if(j.actionId.isEmpty()){j.actionId=remote.finish(j);host.save(j);}
+  if(j.actionId.isEmpty()){
+   for(int attempt=0;attempt<4;attempt++){
+    host.check(j);
+    try{j.actionId=remote.finish(j);host.save(j);break;}
+    catch(RateLimited limited){if(attempt==3)throw limited;j.message="服务器忙，稍后核实同一上传请求";host.save(j);for(int tick=0;tick<21;tick++){host.check(j);Thread.sleep(100);}}
+   }
+  }
   for(int n=0;n<60;n++){
    host.check(j);Action action=remote.action(j);
    if("success".equals(action.state))return;

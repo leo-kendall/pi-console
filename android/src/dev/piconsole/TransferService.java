@@ -26,6 +26,7 @@ public final class TransferService extends Service {
  static void listen(Listener l){listener=new WeakReference<>(l);}
  static void unlisten(Listener l){if(listener.get()==l)listener.clear();}
  static boolean busy(){return running||activeJob!=null||!requested.isEmpty();}
+ static void discardProfile(Context c,String profile)throws Exception{synchronized(QUEUE_LOCK){if(busy())throw new Exception("请先暂停正在运行的传输，再清理服务器配置");for(TransferEngine.Job j:store(c).list())if(j.profile.equals(profile)){remove(c,j);signals.remove(j.id);}store(c).requireProfileEmpty(profile);}}
  static JSONObject state(Context c)throws Exception{
   TransferBinding binding=TransferBinding.capture(c);JSONArray jobs=new JSONArray();String message="尚无传输任务";
   for(TransferEngine.Job j:store(c).list(binding.profile,binding.server)){jobs.put(json(j));message=j.message;}
@@ -37,7 +38,8 @@ public final class TransferService extends Service {
  }
  static void command(Context c,String id,String action)throws Exception{
   TransferEngine.Job j=store(c).get(id);if(!TransferBinding.capture(c).owns(j))throw new Exception("这个任务不属于当前服务器");
-  if(!Arrays.asList("pause","resume","cancel").contains(action))throw new Exception("无效传输操作");
+  if(!Arrays.asList("pause","resume","cancel","discard").contains(action))throw new Exception("无效传输操作");
+  if("discard".equals(action)){if(busy())throw new Exception("请先暂停传输，再移除本机记录");remove(c,j);signals.remove(id);j.status="discarded";j.message="本机记录已移除；服务器发布结果仍需另行核实";emit(c,j);return;}
   if("cancel".equals(action)&&"completed".equals(j.status)){remove(c,j);signals.remove(id);j.status="cancelled";j.message="已移除完成记录";emit(c,j);return;}
   if("cancel".equals(action)&&"upload".equals(j.kind)&&!j.sha256.isEmpty()&&!"completed".equals(j.status))throw new Exception("上传发布可能已经提交，请继续原任务核实结果，不能取消发布");
   if("resume".equals(action)){if("completed".equals(j.status))throw new Exception("任务已完成");TransferBinding.resolve(c,j);signals.remove(id);if(activeJob==null||!activeJob.id.equals(id)){j.status="queued";j.message="等待后台传输";store(c).save(j);}requested.add(id);Intent intent=new Intent(c,TransferService.class).setAction("resume").putExtra("job",id);try{c.startForegroundService(intent);}catch(Exception e){requested.remove(id);j.status="paused";j.message="无法启动后台传输，请保持 App 在前台并重试";store(c).save(j);throw new Exception(j.message);}return;}
@@ -88,7 +90,7 @@ public final class TransferService extends Service {
   public TransferEngine.Upload start(TransferEngine.Job j)throws Exception{JSONObject r=api(j,"/api/files/upload/start",new JSONObject().put("directory",j.directory).put("name",j.name).put("size",j.size).put("request",j.startRequest));return new TransferEngine.Upload(r.getString("id"),r.getLong("offset"),j.size);}
   public TransferEngine.Upload status(TransferEngine.Job j)throws Exception{JSONObject r=api(j,"/api/files/upload/status",new JSONObject().put("id",j.uploadId));return new TransferEngine.Upload(r.getString("id"),r.getLong("offset"),r.getLong("size"));}
   public long append(TransferEngine.Job j,long offset,byte[] data,int count)throws Exception{return api(j,"/api/files/upload/chunk",new JSONObject().put("id",j.uploadId).put("offset",offset).put("data",Base64.encodeToString(data,0,count,Base64.NO_WRAP))).getLong("offset");}
-  public String finish(TransferEngine.Job j)throws Exception{return api(j,"/api/files/upload/finish",new JSONObject().put("id",j.uploadId).put("sha256",j.sha256).put("request",j.finishRequest)).getString("id");}
+  public String finish(TransferEngine.Job j)throws Exception{try{return api(j,"/api/files/upload/finish",new JSONObject().put("id",j.uploadId).put("sha256",j.sha256).put("request",j.finishRequest)).getString("id");}catch(ProbeRules.HttpFailure e){if(e.status==429)throw new TransferEngine.RateLimited();throw e;}}
   public TransferEngine.Action action(TransferEngine.Job j)throws Exception{binding.check(TransferService.this,j);JSONObject r=new JSONObject(StatusClient.request(binding.snapshot,"GET","/api/actions/"+j.actionId,""));return new TransferEngine.Action(r.getString("state"),r.optString("message",""));}
   public TransferEngine.Stat stat(TransferEngine.Job j)throws Exception{JSONObject r=api(j,"/api/files/stat",new JSONObject().put("path",j.path));if(!"file".equals(r.getString("kind")))throw new IOException("只支持下载普通文件");return new TransferEngine.Stat(r.getLong("bytes"),r.getString("ticket"));}
   public TransferEngine.Chunk read(TransferEngine.Job j,long offset)throws Exception{JSONObject r=api(j,"/api/files/read",new JSONObject().put("path",j.path).put("ticket",j.ticket).put("offset",offset));String data=r.getString("data");if(data.length()>TransferEngine.CHUNK*4/3+8)throw new IOException("下载数据块过大");return new TransferEngine.Chunk(r.getLong("offset"),r.getLong("size"),Base64.decode(data,Base64.DEFAULT),r.getBoolean("eof"));}

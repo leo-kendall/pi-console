@@ -1,6 +1,13 @@
 'use strict';
 let manageTab='services',processTimer=null,processLoading=false,processData=null,processFilter='closable',processSort='memory';
+let processEpoch=0,processContext='';
 window.stopProcessPolling=()=>{clearTimeout(processTimer);};
+window.resetProcessCache=()=>{
+ processEpoch++;stopProcessPolling();processLoading=false;processData=null;
+ $('process-list').replaceChildren();$('process-error').textContent='';$('process-note').textContent='';$('process-refresh').disabled=false;
+ for(const id of ['process-count','process-closable','process-available','process-updated'])$(id).textContent='—';
+};
+window.processConnectionChanged=(url,isPaired)=>{const key=JSON.stringify([url,isPaired]);if(key!==processContext){processContext=key;resetProcessCache();}};
 window.showManage=function(){
  const show=manageTab==='processes';$('services-pane').hidden=manageTab!=='services';$('processes-pane').hidden=!show;$('tools-pane').hidden=manageTab!=='tools';if(window.pauseTools)pauseTools();
  document.querySelectorAll('[data-manage-tab]').forEach(b=>{const selected=b.dataset.manageTab===manageTab;b.classList.toggle('selected',selected);b.setAttribute('aria-selected',String(selected));});
@@ -30,10 +37,10 @@ function renderProcesses(){
  $('process-note').textContent=(processData.admin_helper_ready?'管理员进程管理已启用。':'部分应用需要在服务器完成一次管理员授权。')+'每 3 秒刷新 · CPU 以单核 100% 计算。RSS 包含共享页，不能直接视为可释放内存。'+(processData.shown<processData.count?'全部视图展示内存占用最高的 '+processData.shown+' 项及全部可结束进程。':'');
 }
 async function loadProcesses(){
- if(processLoading)return;processLoading=true;$('process-refresh').disabled=true;$('process-error').textContent='';
- try{processData=await api('/api/processes');if(page==='manage'&&manageTab==='processes')renderProcesses();}
- catch(e){$('process-error').textContent=e.message+'；上次读数已保留';if(!processData)$('process-list').replaceChildren(element('div','配对后可查看进程详情','card empty'));}
- finally{processLoading=false;$('process-refresh').disabled=false;stopProcessPolling();if(active&&page==='manage'&&manageTab==='processes')processTimer=setTimeout(loadProcesses,3000);}
+ if(processLoading)return;const epoch=processEpoch;processLoading=true;$('process-refresh').disabled=true;$('process-error').textContent='';
+ try{const data=await api('/api/processes');if(epoch!==processEpoch)return;processData=data;if(page==='manage'&&manageTab==='processes')renderProcesses();}
+ catch(e){if(epoch!==processEpoch)return;$('process-error').textContent=e.message+'；上次读数已保留';if(!processData)$('process-list').replaceChildren(element('div','配对后可查看进程详情','card empty'));}
+ finally{if(epoch===processEpoch){processLoading=false;$('process-refresh').disabled=false;stopProcessPolling();if(active&&page==='manage'&&manageTab==='processes')processTimer=setTimeout(loadProcesses,3000);}}
 }
 $('process-refresh').onclick=loadProcesses;$('process-search').oninput=renderProcesses;
 $('process-sort').onchange=()=>{processSort=$('process-sort').value;renderProcesses();};

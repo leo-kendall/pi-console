@@ -15,7 +15,7 @@
 
 `resources` 默认空，只有显式加入的资源可启停。`kind=user` 指 systemd 用户服务，目标须为 `.service` 单元；`container` 指精确容器名称。`system` 仅支持固定辅助对象 `display → pi-console-display.service` 和 `printer → cups-browsed.service`，不能传入任意系统单元。
 
-已安装的服务与容器会自动扫描并显示，新增对象不自动获得持久控制权限，但符合条件的运行对象可以单次确认结束；不需要先填配置才能看见。只有控制授权变更才需要修改 `resources` 并重启；发现新对象不需要手动改清单。详见[自动发现](auto-discovery.md)。
+已安装的服务与容器会自动扫描并显示，新增对象不自动获得持久控制权限，但符合条件的运行对象可以单次确认结束；不需要先填配置才能看见。管理员也可在手机工具箱中授权确切对象和动作，立即生效；发现新对象不需要手动改清单。详见[自动发现](auto-discovery.md)。
 
 `storage_roots` 决定只读空间分析的可选目录，不授予任意路径删除权限。`disks` 是需监控的实际挂载点列表，默认只有 `/`。删除监控对象后重启服务会协调旧告警。配置文件不保存密码。
 
@@ -63,7 +63,7 @@ sudo /usr/bin/python3 -I -B system-control/manage.py install --user YOUR_LINUX_U
 
 ## 可选远程桌面
 
-当前方案依赖已安装并支持 Remote Login 的 GNOME Remote Desktop、`grdctl`、OpenSSL、nftables、可用的桌面账户与 Docker。是否可用取决于桌面后端及版本，不能仅按 Ubuntu 或其他发行版名称判断。Raspberry Pi OS 默认桌面和其他 VNC/WayVNC、xrdp 环境尚未集成适配；请先查看[远程桌面兼容范围](desktop-compatibility.md)，再决定是否适用本安装器。
+当前方案依赖已安装并支持 Remote Login 的 GNOME Remote Desktop、`grdctl`、OpenSSL、nftables、可用的桌面账户与 Docker。是否可用取决于桌面后端及版本，不能仅按 Ubuntu 或其他发行版名称判断。已有 xrdp/RDP 或 VNC/WayVNC 可以使用独立的本机连接配置工具；WayVNC 只支持兼容的 None/经典密码模式。GNOME 安装器只管理 GNOME Remote Login，请先查看[远程桌面兼容范围](desktop-compatibility.md)，再决定是否适用本安装器。
 
 ```sh
 sudo /usr/bin/python3 -I -B remote-desktop/manage.py preview
@@ -74,3 +74,7 @@ python3 -B bridge_manage.py install
 安装器拒绝覆盖已有 RDP 配置/凭据及已占用端口。桥接只监听 `127.0.0.1:14822`；RDP 的主机防火墙限制为本机及 Tailscale。不要将 guacd 暴露到公网。独立会话与已有本地桌面可能冲突，强制结束旧会话会关闭该桌面的应用和未保存工作。
 
 已有其他 GNOME/RDP 部署时，先阅读 `remote-desktop/manage.py` 的预览及前置检查，自行适配现有部署；不要为了通过安装检查而删除别人的配置。当前 guacd 镜像固定 digest，跨架构兼容性应在目标机器上确认。
+
+## 后续维护
+
+使用[维护工具](maintenance.md)进行环境检查、源码包预览、私有备份、升级失败回退和卸载预览。用户服务之外的 HTTPS、桌面与系统执行器仍由各自的安装与卸载流程管理。

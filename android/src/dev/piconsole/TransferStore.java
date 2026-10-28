@@ -18,6 +18,7 @@ final class TransferStore {
  }}
  List<TransferEngine.Job> list()throws Exception{synchronized(LOCK){List<TransferEngine.Job> jobs=new ArrayList<>();File[] files=directory.listFiles((dir,name)->name.matches("[0-9a-f-]{36}\\.properties"));if(files!=null){Arrays.sort(files,Comparator.comparingLong(File::lastModified));for(File f:files)try{jobs.add(get(f.getName().substring(0,36)));}catch(Exception ignored){/* Corrupt task is never executed. */}}return jobs;}}
  List<TransferEngine.Job> list(String profile,String server)throws Exception{List<TransferEngine.Job> out=new ArrayList<>();for(TransferEngine.Job j:list())if(j.profile.equals(profile)&&j.server.equals(server))out.add(j);return out;}
+ void requireProfileEmpty(String profile)throws Exception{synchronized(LOCK){for(TransferEngine.Job j:list())if(j.profile.equals(profile))throw new IOException("请先切换到此服务器，在文件管理中取消未完成任务并移除传输记录，再删除服务器配置");}}
  void recover()throws Exception{for(TransferEngine.Job j:list())if(!Arrays.asList("completed","cancelled","paused","failed").contains(j.status)){j.status="paused";j.message="应用已重新启动，请确认后继续";save(j);}}
  void remove(TransferEngine.Job j)throws IOException{synchronized(LOCK){Files.deleteIfExists(file(j.id,".part").toPath());Files.deleteIfExists(file(j.id,".properties").toPath());Files.deleteIfExists(file(j.id,".new").toPath());}}
 }

@@ -6,7 +6,7 @@ An Android app for managing a Raspberry Pi or another Linux server.
 
 Check resource usage, manage application processes, services and containers, read logs, transfer files, and connect to an optional remote desktop. Run the backend on your own server, enter its HTTPS address in the app, and pair the device.
 
-[中文文档](README.md) · [Test builds](https://github.com/leo-kendall/pi-console/releases) · [Deployment](docs/deployment.md) · [Configuration](docs/configuration.md) · [Build](docs/build.md) · [Uninstall](docs/uninstall.md)
+[中文文档](README.md) · [Test builds](https://github.com/leo-kendall/pi-console/releases) · [Deployment](docs/deployment.md) · [Configuration](docs/configuration.md) · [Build](docs/build.md) · [Maintenance](docs/maintenance.md) · [Uninstall](docs/uninstall.md)
 
 ## Screenshots
 
@@ -20,19 +20,21 @@ Demo data: overview and service management.
 - Live CPU, temperature, memory, disk and network metrics with sampling history.
 - Automatic discovery of systemd services and Docker containers. Persistent controls and logs require configuration; eligible running applications can also be stopped after one-time confirmation.
 - Process details and sorting by memory or CPU. Application processes can be terminated normally; essential system processes remain read-only.
-- GNOME Remote Login/RDP desktop, landscape fullscreen and adaptive scaling up to 2560 × 1440.
-- An isolated file area with uploads, downloads, renaming and trash/restore, up to 100 MiB per file.
+- Configured local RDP or classic VNC desktop, landscape fullscreen and adaptive scaling up to 2560 × 1440.
+- An isolated file area with uploads, downloads, renaming and trash/restore, up to 8 GiB per file.
 - Alerts, storage analysis, limited cache cleanup, a health summary and configuration backup.
 - Custom links to your web applications.
+- Phone-managed device and service grants, verified update downloads, log follow/filter/export, and local deployment checks with private upgrade backups and rollback.
+- Durable foreground file queues, pause/resume, batch actions and explicitly configured named directories.
 
 ## Current limitations
 
 This is a beta, mainly exercised on Ubuntu ARM64. The app UI is currently in Chinese.
 
 - Some Android devices show a black area when the pointer reaches desktop edges or corners in landscape mode. **This remains unresolved.** The in-app display check can export diagnostic statistics.
-- Desktop support currently targets GNOME Remote Login/RDP. Raspberry Pi OS VNC/WayVNC is not integrated; see [desktop compatibility](docs/desktop-compatibility.md).
-- Touchpad gestures, text sending and on-screen keys are available. Hardware keyboard passthrough and arbitrary key combinations are not implemented.
-- The app connects to one server at a time. Paired devices share the backend's resource configuration and data.
+- Desktop support targets configured local RDP and classic VNC. WayVNC TLS/VeNCrypt/RA2 authentication is not supported; see [desktop compatibility](docs/desktop-compatibility.md).
+- Touchpad gestures, text sending, physical keyboard/mouse, modifier keys and explicit bidirectional text clipboard are available. Android-reserved shortcuts may remain local.
+- Save up to 32 independently paired server profiles and connect to one at a time. Backend devices have administrator, operator or viewer roles; authorized devices share that server's configured resources and file spaces.
 
 ## Getting started
 
@@ -55,7 +57,7 @@ cd /path/to/pi-console
 python3 -B control.py pair
 ```
 
-Enter the one-time eight-character code in the app. A fresh install has no preset server or paired identity. To enable persistent resource controls, copy `config.example.json` to `config.json`, replace the examples with your own resources, and restart the backend. See [configuration](docs/configuration.md) and [automatic discovery](docs/auto-discovery.md).
+Enter the one-time eight-character code in the app. A fresh install has no preset server or paired identity. Administrators can grant exact resource actions from the app toolbox. For local configuration, copy `config.example.json` to `config.json`, replace the examples with your own resources, and restart the backend. See [configuration](docs/configuration.md) and [automatic discovery](docs/auto-discovery.md).
 
 ## Development
 

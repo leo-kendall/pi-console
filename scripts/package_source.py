@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 """Export only checked Git source files, with a deterministic SHA-256 manifest."""
-import hashlib,zipfile
+import hashlib,zipfile,xml.etree.ElementTree as ET
 from pathlib import Path
 from check_release import ROOT,tracked_files,scan_files
 def main():
  files=tracked_files();errors=scan_files(ROOT,files)
  if not files or errors:raise SystemExit('\n'.join(errors) or 'No source files selected')
- out=ROOT/'build/release';out.mkdir(parents=True,exist_ok=True);target=out/'pi-console-source-0.5.0.zip'
+ out=ROOT/'build/release';out.mkdir(parents=True,exist_ok=True);version=ET.parse(ROOT/'android/AndroidManifest.xml').getroot().get('{http://schemas.android.com/apk/res/android}versionName');target=out/('pi-console-source-'+version+'.zip')
  with zipfile.ZipFile(target,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
   manifest=[]
   for name in files:

@@ -26,6 +26,10 @@ jobs:
           node tests/test_desktop_layout.cjs
           node tests/test_desktop_diagnostics.cjs
           node tests/test_desktop_edge_probe.cjs
+          node tests/test_observability_ui.cjs
+          python3 -B scripts/test_file_engine.py
+          python3 -B scripts/test_file_native.py
+          python3 -B scripts/test_file_service.py
           for file in android/assets/*.js; do node --check "$file"; done
       - name: Check publishable source set
         run: python3 -B scripts/check_release.py
@@ -41,6 +45,10 @@ jobs:
           persist-credentials: false
       - name: Ensure Android SDK components
         run: '"${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Android linkage regressions
+        run: |
+          python3 -B scripts/test_client_native_java.py
+          PI_ANDROID_JAR="${ANDROID_HOME}/platforms/android-35/android.jar" python3 -B tests/run_desktop_java.py
       - name: Build development APK
         run: python3 -B scripts/build_android.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

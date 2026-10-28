@@ -51,6 +51,8 @@ class ManagementApiTests(unittest.TestCase):
  def test_named_roots_resume_offsets_and_repeated_chunks_through_real_http(self):
   self.assertEqual(len(self.call(self.viewer,'GET','/api/files/roots')[1]['roots']),2)
   self.assertEqual(self.call(self.viewer,'POST','/api/files/list',{'root':'media','path':''})[1]['items'][0]['name'],'sample.txt')
+  self.assertEqual(self.call(self.viewer,'POST','/api/files/trash/list',{'root':'media'})[0],200)
+  self.assertEqual(self.call(self.viewer,'POST','/api/files/trash',{'root':'media','path':'sample.txt','ticket':'invalid','request':'viewer-trash-attempt'})[0],403)
   start={'root':'media','directory':'','name':'blocked.txt','size':6,'request':'file-test-upload-0001'}
   self.assertEqual(self.call(self.operator,'POST','/api/files/upload/start',start)[0],403)
   start['root']='default'

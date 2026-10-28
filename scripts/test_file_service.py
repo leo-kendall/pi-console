@@ -36,6 +36,10 @@ public final class ServiceNativeTest {
   TransferEngine.Job download=job("download",4);TransferService.enqueue(c,Collections.singletonList(download));waitFor(()->!TransferService.busy());check(Arrays.equals(StatusClient.downloaded,Context.resolver.outputs.get(download.uri).toByteArray()),"staged bytes copied to SAF output");check(!TransferService.store(c).stage(download).exists(),"completed staging cleaned");
   ServerSettings.active="b";check(TransferService.state(c).getJSONArray("jobs").length()==0,"queue state does not expose another profile");ServerSettings.active="a";TransferService.command(c,download.id,"cancel");check(TransferService.store(c).list().size()==1,"completed history can be cleared");
   StatusClient.uploaded.reset();StatusClient.entered=new CountDownLatch(1);StatusClient.release=new CountDownLatch(1);TransferEngine.Job revoked=job("upload",bytes.length);Context.resolver.docs.put(revoked.uri,bytes);TransferService.enqueue(c,Collections.singletonList(revoked));check(StatusClient.entered.await(3,TimeUnit.SECONDS),"revocation fixture started");ServerSettings.token="replacement-credential";StatusClient.release.countDown();waitFor(()->!TransferService.busy());check(StatusClient.uploaded.size()==TransferEngine.CHUNK&&TransferService.store(c).get(revoked.id).status.equals("failed"),"credential replacement prevents further chunks");ServerSettings.token="secret";
+  TransferEngine.Job uncertain=job("upload",0);uncertain.sha256="fixture-hash";uncertain.actionId="uncertain-action";uncertain.status="failed";TransferService.store(c).save(uncertain);int beforeDiscard=StatusClient.finishes;
+  try{TransferService.command(c,uncertain.id,"cancel");throw new AssertionError("must not promise to cancel publication");}catch(Exception expected){}
+  TransferService.command(c,uncertain.id,"discard");check(TransferService.store(c).list().stream().noneMatch(x->x.id.equals(uncertain.id)),"uncertain local record can be explicitly discarded");check(StatusClient.finishes==beforeDiscard,"local discard never resubmits publication");
+  ServerSettings.token="";TransferService.discardProfile(c,"a");TransferService.store(c).requireProfileEmpty("a");check(TransferService.store(c).list().isEmpty(),"offline/unpaired profile cleanup removes all paused/history records");check(StatusClient.finishes==beforeDiscard,"profile cleanup is local only");ServerSettings.token="secret";
   System.out.println("Foreground service integration: captured transport, in-flight pause/resume, no duplicate bytes, lifecycle drain, SAF stage publish/cleanup and per-profile queue state passed (Android lifecycle/transport substitutes)");
  }
 }'''
@@ -49,6 +53,6 @@ with tempfile.TemporaryDirectory(prefix='pi-file-service-') as tmp:
  base=Path(tmp)
  for name,source in sources.items():
   p=base/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(source)
- production=[root/'android/src/dev/piconsole'/name for name in ['TransferService.java','TransferEngine.java','TransferStore.java','TransferBinding.java']]
+ production=[root/'android/src/dev/piconsole'/name for name in ['TransferService.java','TransferEngine.java','TransferStore.java','TransferBinding.java','ProbeRules.java']]
  subprocess.run([str(java/'javac') if (java/'javac').exists() else 'javac','--release','8','-d',tmp,*map(str,production),*map(str,base.rglob('*.java'))],check=True)
  subprocess.run([str(java/'java') if (java/'java').exists() else 'java','-Dpi.test.dir='+str(base/'private'),'-cp',tmp,'dev.piconsole.ServiceNativeTest'],check=True,timeout=20)

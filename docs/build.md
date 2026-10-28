@@ -39,3 +39,13 @@ unset PI_CONSOLE_KEYSTORE_PASSWORD
 服务列表布局与状态本地化回归：在同一预览与临时 Firefox 会话下运行 `node scripts/test_resource_layout_ui.mjs`，覆盖 320、360、412、768 像素宽度、深浅主题、连续长名称，以及缺失或未知的状态值。
 
 桌面边缘诊断交互回归：在同一模拟预览与临时 Firefox 下运行 `node scripts/test_desktop_edge_ui.mjs`，验证四角输入会自动采样、无需打开控件或主动重绘、记录数量受限、复制报告和断开连接取消。原生窗口范围与错误处理由 `tests/test_desktop_probe.py` 用 Android API 替身运行真实 Java 采样代码；这些测试不代替实体手机上的 PixelCopy 与绘制验证。
+
+## 连续发布与覆盖升级
+
+长期分发应固定并私下备份同一签名身份。`scripts/release_android.py` 接受已编译的未签名 APK、仓库外的私有 keystore 和固定证书 SHA256，规范化 ZIP 元数据、签名、核对证书并输出校验文件；它不会生成密钥或上传。口令仍通过环境传给工具。先对照现有用户安装包核对证书，不能为了“正式签名”直接换一把新密钥。
+
+```sh
+python3 -B scripts/release_android.py --unsigned build/android/unsigned.apk --expected-cert-sha256 YOUR_FIXED_CERT_SHA256 --output build/pi-console-release.apk
+```
+
+App 更新器接受官方 Release 中的 `pi-console.apk`、`pi-console-release.apk` 或 `pi-console-VERSION.apk`，要求 GitHub 资源元数据具有 SHA256，下载后再验证实际摘要、包名、版本号和签名兼容性。源码 ZIP 的版本名来自 AndroidManifest；导出只包含通过检查的 Git 源码与哈希清单，不包含构建产物、个人配置或签名资料。

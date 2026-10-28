@@ -19,10 +19,16 @@ try{
  await waitFor("!!$('server-profiles')");
  await evaluate('loadProfiles();void 0');await waitFor("document.querySelectorAll('[data-profile-id]').length===2");
  assert.equal(await evaluate("clientCalls.filter(c=>c[0]==='profileStatus').length"),0,'saved endpoints are not polled');
+ await evaluate("$('alert-banner').hidden=false;$('alert-count').textContent='99 项来自 A 的旧异常';processData={processes:[{pid:8765,start:10,name:'private-process-from-A',owner:'old-owner',exe:'/app/old',can_close:true,rss_bytes:123,app_rss_bytes:123,cpu_percent:1,state:'S'}],count:1,closable:1,memory_available:1024,sampled_at:1700000000,shown:1};void 0");
  await evaluate("document.querySelector('[data-profile-switch=\"b\"]').click();void 0");await waitFor("clientActive==='b'&&$('pair-state').textContent==='未配对'");
  assert.equal(await evaluate("document.body.classList.contains('dark')"),true,'profile-specific preferences restored');
  assert.equal(await evaluate('status===null&&history.length===0'),true,'old metrics cleared');
  assert.equal(await evaluate("$('frequency').value"),'0','manual refresh preference survives profile switch');
+ assert.equal(await evaluate("$('alert-banner').hidden"),true,'old server alert count must be hidden after switch');
+ await evaluate("window.beforeProcessApi=api;api=(path,body)=>path==='/api/processes'?new Promise(()=>{}):beforeProcessApi(path,body);openProcesses();$('process-search').value='private-process-from-A';$('process-search').dispatchEvent(new Event('input'));void 0");
+ assert.equal(await evaluate("$('process-list').textContent.includes('private-process-from-A')"),false,'unavailable new server must never display previous server process model');
+ assert.equal(await evaluate("$('process-count').textContent"),'—','old process statistics are cleared');
+ await evaluate("api=beforeProcessApi;navigate('settings');void 0");
  await evaluate("document.querySelector('[data-profile-status=\"a\"]').click();void 0");await waitFor("document.querySelector('[data-profile-id=\"a\"]').textContent.includes('在线')");
  await evaluate("$('add-profile').click();void 0");await waitFor("!!$('profile-name')");
  await evaluate("$('profile-name').value='New';$('profile-url').value='https://c.test';$('profile-save').click();void 0");await waitFor('clientProfiles.length===3');

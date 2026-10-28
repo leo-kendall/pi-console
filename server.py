@@ -12,7 +12,7 @@ import threading
 import time
 from urllib.parse import urlsplit, parse_qs
 from control import Control, ApiError
-from desktop import Desktop
+from desktop import Desktop,capabilities as desktop_capabilities
 from telemetry import Telemetry
 from processes import Processes
 from alerts import Alerts
@@ -253,6 +253,8 @@ class Handler(socketserver.StreamRequestHandler):
                 elif method == "GET" and path.startswith("/api/actions/"):
                     result = CONTROL.operation(owner,path.removeprefix("/api/actions/"))
                     if result["state"] not in ("queued","running"): RESOURCE_CACHE[0] = 0
+                elif method=='GET' and path=='/api/desktop/capabilities':
+                    result=desktop_capabilities(ROOT)
                 elif method == "POST" and path == "/api/unpair":
                     DESKTOP.revoke(owner); CONTROL.revoke(owner); result={"ok":True}
                 elif method == "POST" and path == "/api/desktop/open":

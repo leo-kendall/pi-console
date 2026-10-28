@@ -34,6 +34,12 @@ class SetupApiTests(unittest.TestCase):
   self.assertEqual(self.request('/api/setup','POST',token)[0],404)
   self.assertEqual(self.request('/api/connection','POST',token)[0],404)
   self.assertEqual(self.calls,[])
+ def test_desktop_capabilities_are_authenticated_sanitized_and_configuration_only(self):
+  self.assertEqual(self.request('/api/desktop/capabilities')[0],401)
+  token=self.control.pair(self.control.new_code('viewer'))['token']
+  with patch('server.ROOT',self.root):code,data=self.request('/api/desktop/capabilities',token=token)
+  self.assertEqual(code,200);self.assertEqual(data['protocols'],['rdp','vnc']);self.assertFalse(data['configuration']['live_verified'])
+  self.assertNotIn('password',json.dumps(data));self.assertEqual(self.calls,[])
  def test_view_only_device_cannot_bypass_permissions_using_direct_http(self):
   admin=self.control.pair(self.control.new_code('admin'));viewer=self.control.pair(self.control.new_code('viewer'))
   self.assertEqual(self.request('/api/session',token=viewer['token'])[1]['role'],'viewer')
@@ -56,6 +62,11 @@ class SetupReportTests(unittest.TestCase):
   self.assertEqual(checks['desktop']['state'],'optional')
   self.assertEqual(checks['process_admin']['state'],'optional')
   self.assertEqual(checks['resources']['state'],'optional')
+ def test_vnc_configuration_does_not_require_gnome_credentials_or_certificate(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);p=root/'remote-desktop/connection.json';p.parent.mkdir();p.write_text(json.dumps({'protocol':'vnc','security':'none','password':''}));p.chmod(0o600)
+   data=self.report(root);desktop=next(c for c in data['checks'] if c['id']=='desktop')
+   self.assertEqual(desktop['state'],'configured');self.assertIn('VNC',desktop['detail']);self.assertNotIn('password',json.dumps(data))
  def test_desktop_configuration_is_checked_without_echoing_secrets_or_opening_a_session(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);p=root/'remote-desktop/connection.json';p.parent.mkdir()

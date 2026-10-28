@@ -33,3 +33,5 @@ unset PI_CONSOLE_KEYSTORE_PASSWORD
 此脚本不会生成生产密钥、下载工具或发布文件。它固定 ZIP 排序、权限及时间戳（默认当前 Git 提交时间，也可用 `SOURCE_DATE_EPOCH`），对齐后通过环境传递密码签名，验证实际证书指纹再替换输出，并生成 SHA256 文件。要复现同一产物，还需固定源提交、SDK/JDK、aapt2、D8、zipalign、apksigner 版本及同一 RSA 签名密钥；EC 签名可能包含随机性。连续两次私有干净构建应对比 APK 哈希。
 
 上传名为 `pi-console-release.apk` 或 `pi-console.apk` 的资源到官方 GitHub Release。GitHub API 应提供 `digest: sha256:…`，同时可附上脚本生成的 `.apk.sha256`。更新器不会信任网页说明中的散列值。最终 Android 安装器仍会执行平台的 APK 签名及升级权限验证。
+
+Removing a saved server explicitly discards its local transfer records, stages and unused URI grants after you confirm; this cleanup works offline and without pairing. It does not undo a server upload or revoke a server device. Active transfers must be paused first. Changing a saved endpoint requires clearing its transfer records first; adding a separate profile preserves the old binding.

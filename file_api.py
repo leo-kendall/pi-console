@@ -16,6 +16,7 @@ def dispatch(method,path,data,owner,registry,control):
  if method=='GET' and action=='trash':return space.trash_list(owner)
  if method!='POST':raise ApiError('接口不存在',404)
  fields=set(body)
+ if action=='trash/list' and not fields:return space.trash_list(owner)
  if action=='list' and fields=={'path'}:return space.list(body['path'])
  if action=='stat' and fields=={'path'}:return space.stat(owner,body['path'])
  if action=='read' and fields=={'path','offset','ticket'}:return space.read(owner,body['path'],body['offset'],body['ticket'])

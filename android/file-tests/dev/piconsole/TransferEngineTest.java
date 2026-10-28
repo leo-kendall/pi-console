@@ -15,12 +15,12 @@ public final class TransferEngineTest {
   public void publish(TransferEngine.Job j,File file)throws Exception{TransferEngineTest.check(Arrays.equals(source,Files.readAllBytes(file.toPath())),"published bytes match");published++;}
  }
  static final class Remote implements TransferEngine.Remote {
-  byte[] data;ByteArrayOutputStream upload=new ByteArrayOutputStream();String ticket="ticket-a";int chunks,finishes,starts;boolean loseAck,loseFinish,badOffset,emptyChunk;String lastRequest="";
+  byte[] data;ByteArrayOutputStream upload=new ByteArrayOutputStream();String ticket="ticket-a";int chunks,finishes,starts,rateLimits;boolean loseAck,loseFinish,badOffset,emptyChunk;String lastRequest="";
   Remote(byte[] data){this.data=data;}
   public TransferEngine.Upload start(TransferEngine.Job j){starts++;lastRequest=j.startRequest;return new TransferEngine.Upload("server-id",upload.size(),j.size);}
   public TransferEngine.Upload status(TransferEngine.Job j){return new TransferEngine.Upload("server-id",upload.size(),j.size);}
   public long append(TransferEngine.Job j,long offset,byte[] b,int count)throws Exception{check(offset==upload.size(),"correct remote offset");upload.write(b,0,count);chunks++;if(loseAck){loseAck=false;throw new IOException("ack lost");}return upload.size();}
-  public String finish(TransferEngine.Job j)throws Exception{finishes++;check(j.sha256.equals(TransferEngine.digest(upload.toByteArray())),"finish checksum matches remote");if(loseFinish){loseFinish=false;throw new IOException("finish ack lost");}return "operation-id";}
+  public String finish(TransferEngine.Job j)throws Exception{finishes++;if(rateLimits-->0)throw new TransferEngine.RateLimited();check(j.sha256.equals(TransferEngine.digest(upload.toByteArray())),"finish checksum matches remote");if(loseFinish){loseFinish=false;throw new IOException("finish ack lost");}return "operation-id";}
   public TransferEngine.Action action(TransferEngine.Job j){return new TransferEngine.Action("success","");}
   public TransferEngine.Stat stat(TransferEngine.Job j){return new TransferEngine.Stat(data.length,ticket);}
   public TransferEngine.Chunk read(TransferEngine.Job j,long offset){int end=(int)Math.min(data.length,offset+TransferEngine.CHUNK);return new TransferEngine.Chunk(badOffset?offset+1:offset,data.length,emptyChunk?new byte[0]:Arrays.copyOfRange(data,(int)offset,end),end==data.length);}
@@ -47,6 +47,7 @@ public final class TransferEngineTest {
   check(new TransferEngine.Job("large","upload",2L*1024*1024*1024).size>Integer.MAX_VALUE,"large files use long offsets");
   for(boolean empty:new boolean[]{false,true}){h=new Host(bytes);r=new Remote(bytes);r.badOffset=!empty;r.emptyChunk=empty;j=new TransferEngine.Job("invalid","download",bytes.length);try{TransferEngine.run(j,r,h);throw new AssertionError("invalid remote chunk accepted");}catch(IOException expected){}check(h.published==0,"malformed chunks never publish");}
   h=new Host(bytes);h.journal=new TransferStore(Files.createTempDirectory("transfer-crash-").toFile());r=new Remote(bytes);r.loseAck=true;j=new TransferEngine.Job("01234567-1234-1234-1234-123456789abc","upload",bytes.length);try{TransferEngine.run(j,r,h);}catch(IOException expected){}j=h.journal.get(j.id);TransferEngine.run(j,r,h);check(Arrays.equals(bytes,r.upload.toByteArray()),"actual persisted record resumes lost ACK after process replacement");
+  h=new Host(new byte[0]);r=new Remote(new byte[0]);r.rateLimits=2;j=new TransferEngine.Job("rate","upload",0);String stable=j.finishRequest;TransferEngine.run(j,r,h);check(r.finishes==3&&j.finishRequest.equals(stable)&&j.status.equals("completed"),"rate-limited empty batch upload retries same finish request");
   System.out.println("Transfer engine: lost ACK, resume, pause, idempotent finish, staged download, changed identity and 8 GiB bounds passed");
  }
 }

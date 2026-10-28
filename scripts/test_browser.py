@@ -4,7 +4,7 @@
 import os,shutil,socket,subprocess,sys,tempfile,time
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
-DEFAULTS=['test_setup_ui.mjs','test_ui.mjs','test_admin_ui.mjs','test_client_ui.mjs','test_observability_ui.mjs','test_resource_layout_ui.mjs','test_discovery_ui.mjs','test_resource_end_ui.mjs','test_desktop_edge_ui.mjs']
+DEFAULTS=['test_setup_ui.mjs','test_ui.mjs','test_admin_ui.mjs','test_client_ui.mjs','test_observability_ui.mjs','test_resource_layout_ui.mjs','test_discovery_ui.mjs','test_resource_end_ui.mjs','test_desktop_edge_ui.mjs','test_desktop_input_ui.mjs','test_files_ui.mjs']
 
 def main():
  browser=os.environ.get('PI_FIREFOX') or shutil.which('firefox')

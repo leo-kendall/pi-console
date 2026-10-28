@@ -1,31 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """Read-only setup hints. Configuration presence is not a live service probe."""
-import json,os,stat
-from desktop import certificate_pin
-from control import ApiError
+from desktop import capabilities
 
 
 def desktop_check(root):
- path=root/'remote-desktop/connection.json'
- try:
-  fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
- except FileNotFoundError:
-  return 'optional','未配置桌面；不影响监控和其他管理功能。'
- except OSError:
-  return 'attention','桌面配置无法安全读取，请检查配置文件及权限。'
- try:
-  with os.fdopen(fd,'rb') as stream:
-   info=os.fstat(stream.fileno())
-   if not stat.S_ISREG(info.st_mode) or info.st_mode&0o077 or info.st_size>65536:
-    return 'attention','桌面配置权限或文件类型异常，请在服务器检查。'
-   payload=stream.read(65537)
-   if len(payload)>65536:raise ValueError()
-   config=json.loads(payload)
-   if not isinstance(config,dict) or any(not isinstance(config.get(k),str) or not config[k] for k in ('username','password','fingerprint')):raise ValueError()
-   certificate_pin(config['fingerprint'])
- except (OSError,ValueError,TypeError,ApiError):
-  return 'attention','桌面配置不完整或格式异常，请在服务器检查。'
- return 'configured','已找到 GNOME/RDP 配置；尚未验证桌面服务、桥接和登录是否可用。'
+ config=capabilities(root)['configuration']
+ if config['state']=='unconfigured':return 'optional','未配置桌面；不影响监控和其他管理功能。'
+ if config['state']!='configured':return 'attention','桌面配置缺失、权限或格式异常，请在服务器检查。'
+ return 'configured','已找到 '+config['protocol'].upper()+' 本机桌面配置；尚未验证桌面服务、桥接和登录是否可用。'
 
 
 def report(root,resources,admin_ready):

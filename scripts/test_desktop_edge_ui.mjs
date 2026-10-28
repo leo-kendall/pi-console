@@ -1,3 +1,5 @@
+import {readFileSync} from 'node:fs';
+const manifest=readFileSync(new URL('../android/AndroidManifest.xml',import.meta.url),'utf8'),expectedBuild=Number(manifest.match(/android:versionCode="([0-9]+)"/)[1]),expectedVersion=manifest.match(/android:versionName="([^"]+)"/)[1];
 // SPDX-License-Identifier: Apache-2.0
 // Optional Node 22+/Firefox BiDi smoke check against scripts/preview_ui.py.
 import assert from 'node:assert/strict';
@@ -38,8 +40,8 @@ try{
  await evaluate("$('desk-inspect').click();void 0");await waitFor("$('sheet').open");
  assert.equal(await evaluate('repaintCalls'),1);
  await evaluate("Array.from($('sheet-content').querySelectorAll('button')).find(b=>b.textContent==='复制诊断').click();void 0");await waitFor('copiedReport!==null');
- assert.equal(await evaluate('copiedReport.build'),21);assert.equal(await evaluate('copiedReport.edges.length'),4);
+ assert.equal(await evaluate('copiedReport.build'),expectedBuild);assert.equal(await evaluate('copiedReport.version'),expectedVersion);assert.equal(await evaluate('copiedReport.edges.length'),4);
  assert.equal(await evaluate('copiedReport.edges.every(e=>e.sample.window.available&&e.sample.window.pixelCopy===0)'),true);
  const before=await evaluate('probeCalls');await evaluate("stopDesktop();desktopMouse.move({x:1,y:1});void 0");await delay(300);assert.equal(await evaluate('probeCalls'),before);
- console.log('Desktop input automatically captures all four corners with controls closed and no repaint; copied build-21 report includes bounded edge samples; disconnect prevents further capture (simulated desktop/native boundary).');
+ console.log('Desktop input automatically captures all four corners with controls closed and no repaint; copied current-version report includes bounded edge samples; disconnect prevents further capture (simulated desktop/native boundary).');
 }finally{await evaluate('stopDesktop();pauseApp();void 0').catch(()=>{});await call('session.end');socket.close();}

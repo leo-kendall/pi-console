@@ -3,7 +3,7 @@
 """Deterministically repack a compiled unsigned APK and sign using a private fixed key.
 Does not generate keys, download tools, publish artifacts or read server configuration.
 """
-import argparse,datetime,hashlib,json,os,re,stat,subprocess,tempfile,zipfile
+import argparse,datetime,hashlib,json,os,re,stat,struct,subprocess,tempfile,zipfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 def fingerprint(value):
@@ -24,8 +24,19 @@ def repack(source,target,epoch):
   if any(n.startswith('/') or '..' in Path(n).parts or re.match(r'META-INF/.*\.(?:RSA|DSA|EC|SF)$',n,re.I) for n in names):raise ValueError('Input must be unsigned and contain safe paths')
   with zipfile.ZipFile(target,'w') as out:
    for name in sorted(names):
-    item=zipfile.ZipInfo(name,fixed);item.create_system=3;item.external_attr=0o100644<<16;item.compress_type=zipfile.ZIP_STORED if name=='classes.dex' else zipfile.ZIP_DEFLATED
+    # Android 11+ rejects compressed resources.arsc for target SDK 30+.
+    item=zipfile.ZipInfo(name,fixed);item.create_system=3;item.external_attr=0o100644<<16;item.compress_type=zipfile.ZIP_STORED if name in {'classes.dex','resources.arsc'} else zipfile.ZIP_DEFLATED
     out.writestr(item,old.read(name),compresslevel=9)
+def verify_resource_table(apk):
+ with zipfile.ZipFile(apk) as archive:
+  try:item=archive.getinfo('resources.arsc')
+  except KeyError:raise ValueError('APK is missing resources.arsc') from None
+  if item.compress_type!=zipfile.ZIP_STORED:raise ValueError('resources.arsc must be uncompressed for Android 11+')
+  with Path(apk).open('rb') as stream:
+   stream.seek(item.header_offset);header=stream.read(30)
+  if len(header)!=30 or header[:4]!=b'PK\x03\x04':raise ValueError('Invalid resources.arsc local ZIP header')
+  name_length,extra_length=struct.unpack_from('<HH',header,26)
+  if (item.header_offset+30+name_length+extra_length)%4:raise ValueError('resources.arsc must be aligned to 4 bytes for Android 11+')
 def verify_certificate(output,expected):
  found=re.findall(r'Signer #\d+ certificate SHA-256 digest:\s*([a-fA-F0-9]{64})',output)
  if found!=[fingerprint(expected)]:raise ValueError('Signed APK certificate does not match the approved fixed production signer')
@@ -48,6 +59,7 @@ def main():
   subprocess.run([*signer,'sign','--ks',str(key),'--ks-key-alias',alias,'--ks-pass','env:PI_CONSOLE_KEYSTORE_PASSWORD','--v1-signing-enabled','true','--v2-signing-enabled','true','--v3-signing-enabled','true','--out',str(d/'signed.apk'),str(d/'aligned.apk')],check=True,stdin=subprocess.DEVNULL)
   verified=subprocess.check_output([*signer,'verify','--verbose','--print-certs',str(d/'signed.apk')],text=True,stdin=subprocess.DEVNULL);verify_certificate(verified,expected)
   subprocess.run([align,'-c','-p','4',str(d/'signed.apk')],check=True,stdin=subprocess.DEVNULL)
+  verify_resource_table(d/'signed.apk')
   (d/'signed.apk').replace(a.output)
  digest=hashlib.sha256(a.output.read_bytes()).hexdigest();a.output.with_suffix('.apk.sha256').write_text(digest+'  '+a.output.name+'\n')
  print(json.dumps({'apk':str(a.output),'sha256':digest,'certificate_sha256':expected,'source_date_epoch':epoch}))

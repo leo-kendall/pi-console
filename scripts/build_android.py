@@ -3,6 +3,7 @@
 """Build with a standard Android SDK and JDK; never downloads tools or keys."""
 import argparse,json,os,shutil,subprocess,zipfile
 from pathlib import Path
+from release_android import verify_resource_table
 ROOT=Path(__file__).resolve().parents[1]
 def run(args):subprocess.run(list(map(str,args)),check=True,stdin=subprocess.DEVNULL)
 def main():
@@ -49,5 +50,6 @@ def main():
  if keystore.is_symlink() or not keystore.is_file():raise SystemExit('Invalid keystore path')
  run([*signer,'sign','--ks',keystore,'--ks-key-alias',alias,'--ks-pass',password,'--out',output,work/'aligned.apk'])
  run([*signer,'verify','--verbose',output]);run([align,'-c','-p','4',output])
+ verify_resource_table(output)
  print(json.dumps({'apk':str(output),'release_signing':args.release,'bytes':output.stat().st_size}))
 if __name__=='__main__':main()

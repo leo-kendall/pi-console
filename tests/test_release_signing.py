@@ -5,6 +5,29 @@ spec=importlib.util.spec_from_file_location('release_android',Path(__file__).res
 m=importlib.util.module_from_spec(spec)
 if spec.loader: spec.loader.exec_module(m)
 class ReleaseSigningTests(unittest.TestCase):
+ def test_repack_keeps_resource_table_uncompressed_for_android_11(self):
+  with tempfile.TemporaryDirectory() as d:
+   d=Path(d)
+   with zipfile.ZipFile(d/'unsigned.apk','w',compression=zipfile.ZIP_DEFLATED) as z:
+    z.writestr('classes.dex',b'dex fixture');z.writestr('AndroidManifest.xml',b'manifest fixture');z.writestr('resources.arsc',b'resources fixture')
+   m.repack(d/'unsigned.apk',d/'release.apk',1700000000)
+   with zipfile.ZipFile(d/'release.apk') as z:
+    self.assertEqual(z.getinfo('resources.arsc').compress_type,zipfile.ZIP_STORED)
+    self.assertEqual(z.read('resources.arsc'),b'resources fixture')
+ def test_resource_table_validation_rejects_compression_and_misalignment(self):
+  for compressed,extra,valid in [(True,b'',False),(False,b'',True),(False,b'\xfe\xca\x01\x00x',False),(False,b'\xfe\xca\x04\x00xxxx',True)]:
+   with self.subTest(compressed=compressed,extra=extra),tempfile.TemporaryDirectory() as d:
+    apk=Path(d)/'fixture.apk'
+    item=zipfile.ZipInfo('resources.arsc');item.compress_type=zipfile.ZIP_DEFLATED if compressed else zipfile.ZIP_STORED;item.extra=extra
+    with zipfile.ZipFile(apk,'w') as z:z.writestr(item,b'resources fixture')
+    if valid:m.verify_resource_table(apk)
+    else:
+     with self.assertRaisesRegex(ValueError,'resources.arsc'):m.verify_resource_table(apk)
+ def test_resource_table_validation_rejects_missing_table(self):
+  with tempfile.TemporaryDirectory() as d:
+   apk=Path(d)/'fixture.apk'
+   with zipfile.ZipFile(apk,'w') as z:z.writestr('classes.dex',b'dex fixture')
+   with self.assertRaisesRegex(ValueError,'resources.arsc'):m.verify_resource_table(apk)
  def test_repack_deterministic_and_stored_dex(self):
   with tempfile.TemporaryDirectory() as d:
    d=Path(d)

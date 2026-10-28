@@ -44,6 +44,8 @@ unset PI_CONSOLE_KEYSTORE_PASSWORD
 
 长期分发应固定并私下备份同一签名身份。`scripts/release_android.py` 接受已编译的未签名 APK、仓库外的私有 keystore 和固定证书 SHA256，规范化 ZIP 元数据、签名、核对证书并输出校验文件；它不会生成密钥或上传。口令仍通过环境传给工具。先对照现有用户安装包核对证书，不能为了“正式签名”直接换一把新密钥。
 
+Android 11 及以上要求面向 API 30+ 的 APK 中 `resources.arsc` 不压缩且按 4 字节对齐。构建和发布脚本都会验证最终签名包的资源表；仅通过签名和 `zipalign` 检查不足以发现被压缩的资源表。0.6.0-beta.2 修复了 beta.1 发布重打包时误压缩资源表导致安装失败的问题，版本号递增并保留同一签名用于覆盖升级。
+
 ```sh
 python3 -B scripts/release_android.py --unsigned build/android/unsigned.apk --expected-cert-sha256 YOUR_FIXED_CERT_SHA256 --output build/pi-console-release.apk
 ```

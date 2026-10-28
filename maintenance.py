@@ -16,7 +16,7 @@ def safe(path):
 def source_path(name):
  p=PurePosixPath(name)
  if not name or str(p)!=name or p.is_absolute() or any(x in ('..','.') or x in EXCLUDED for x in p.parts) or '\\' in name or any(ord(c)<32 for c in name):raise ValueError('Unsafe source path')
- if name in PRIVATE or p.name.startswith('.env') or p.suffix not in SUFFIXES and p.name not in ('LICENSE','NOTICE','.gitignore','.gitattributes','.editorconfig'):raise ValueError('Private or unsupported source file')
+ if name in PRIVATE or p.name.startswith('.env') or p.suffix not in SUFFIXES and p.name not in ('LICENSE','NOTICE','.gitignore','.gitattributes','.editorconfig') and name!='deploy/Caddyfile.example':raise ValueError('Private or unsupported source file')
  return p
 def atomic(path,data,mode=0o600):
  safe(path);path.parent.mkdir(mode=0o700,parents=True,exist_ok=True)

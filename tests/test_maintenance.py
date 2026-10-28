@@ -32,6 +32,9 @@ class MaintenanceTests(unittest.TestCase):
   path=self.bundle()
   with zipfile.ZipFile(path,'a') as z:z.writestr('pi-console/unlisted.py','evil = True')
   with self.assertRaises((ValueError,RuntimeError)):m.preview(path)
+ def test_public_reverse_proxy_example_is_accepted_in_official_source_bundle(self):
+  files={'server.py':b'VERSION = 2\n','control.py':b'ROLE = 2\n','deploy/Caddyfile.example':b'console.example.test {\n reverse_proxy 127.0.0.1:18765\n}\n'}
+  self.assertEqual(self.maintenance().preview(self.bundle(files))['files'],3)
  def test_private_backup_upgrade_and_rollback_preserve_configuration_and_user_files(self):
   m=self.maintenance();result=m.upgrade(self.bundle());ident=result['backup']
   self.assertEqual((self.root/'server.py').read_text(),'VERSION = 2\n')

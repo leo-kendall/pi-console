@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.content.pm.PackageInfo;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Build;
 import android.os.Handler;
@@ -20,11 +21,28 @@ final class DesktopProbe {
  private static void failed(JSONObject out,String reason,Done done)throws Exception {
   out.put("available",false);out.put("reason",reason);done.complete(out);
  }
+ // Numeric geometry is sufficient to distinguish app letterboxing from CSS placement.
+ // Bound every platform value and expose no screenshot, page text or input data.
+ private static JSONArray geometryValues(int... values){
+  JSONArray out=new JSONArray();for(int value:values)out.put(Math.max(-131072,Math.min(131072,value)));return out;
+ }
+ private static JSONObject geometry(Activity activity,WebView web)throws Exception {
+  int[] inWindow=new int[2],onScreen=new int[2];web.getLocationInWindow(inWindow);web.getLocationOnScreen(onScreen);
+  JSONObject out=new JSONObject().put("view",geometryValues(web.getWidth(),web.getHeight()))
+   .put("content",geometryValues(Math.max(0,web.getWidth()-web.getPaddingLeft()-web.getPaddingRight()),Math.max(0,web.getHeight()-web.getPaddingTop()-web.getPaddingBottom())))
+   .put("padding",geometryValues(web.getPaddingLeft(),web.getPaddingTop(),web.getPaddingRight(),web.getPaddingBottom()))
+   .put("window",geometryValues(activity.getWindow().getDecorView().getWidth(),activity.getWindow().getDecorView().getHeight()))
+   .put("inWindow",geometryValues(inWindow[0],inWindow[1])).put("onScreen",geometryValues(onScreen[0],onScreen[1]));
+  android.view.Display display=web.getDisplay();
+  if(display!=null){Point size=new Point();display.getRealSize(size);out.put("display",geometryValues(size.x,size.y));}
+  return out;
+ }
  private static JSONArray rectangle(Rect r){return new JSONArray().put(r.left).put(r.top).put(r.right).put(r.bottom);}
  static void capture(Activity activity,WebView web,JSONObject request,Done done)throws Exception {
   final JSONObject out=new JSONObject().put("available",false);
   out.put("sdk",Build.VERSION.SDK_INT);out.put("layer",web.getLayerType());out.put("hardwareWindow",web.isHardwareAccelerated());
   try{PackageInfo pkg=WebView.getCurrentWebViewPackage();if(pkg!=null)out.put("webview",pkg.packageName+" "+pkg.versionName);}catch(Exception ignored){}
+  try{out.put("geometry",geometry(activity,web));}catch(Exception ignored){}
   final double cssWidth,cssHeight,x,y,width,height;
   try{
    cssWidth=request.getDouble("cssWidth");cssHeight=request.getDouble("cssHeight");

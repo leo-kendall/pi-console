@@ -91,8 +91,8 @@ document.addEventListener('focusin',()=>{if(desktopEditorFocused())releaseDeskto
 document.addEventListener('focusout',()=>setTimeout(()=>setNativeDesktopInput(true),0));
 window.addEventListener('error',()=>desktopTrace?.event('window-error'));
 window.addEventListener('unhandledrejection',()=>desktopTrace?.event('decode-error'));
-window.stopDesktop=function(){desktopShortcutHeld=false;local('desktopInputShortcut','').catch(()=>{});releaseDesktopInput();setNativeDesktopInput(false);desktopRemoteClipboard='';desktopClipboardAvailable=false;updateDesktopClipboard();desktopKeyboard?.reset();desktopKeyboard=null;desktopBrowserMouse=null;desktopScaling=null;desktopEdgeProbe?.dispose();desktopEdgeProbe=null;local('desktopRendering','default').catch(()=>{});leaveDesktopFullscreen();desktopGeneration++;const sid=desktopId;desktopId=null;if(desktopClient){try{desktopClient.disconnect();}catch(e){}desktopClient=null;}if(sid)api('/api/desktop/close/'+sid,{}).catch(()=>{});$('screen').replaceChildren();$('screen').style.width='';$('screen').style.height='';$('desktop-session').hidden=true;document.querySelector('.desktop-intro').hidden=false;$('desktop-connect').disabled=false;$('desktop-connect').textContent='连接桌面';$('desktop-text').value='';desktopConnecting=false;};
-let fullscreenDesktop=false,manualFullscreen=false,fullscreenDismissed=false,deviceLandscape=null,resizeDesktopTimer=null;
+window.stopDesktop=function(){resetDesktopResizeRequest();desktopShortcutHeld=false;local('desktopInputShortcut','').catch(()=>{});releaseDesktopInput();setNativeDesktopInput(false);desktopRemoteClipboard='';desktopClipboardAvailable=false;updateDesktopClipboard();desktopKeyboard?.reset();desktopKeyboard=null;desktopBrowserMouse=null;desktopScaling=null;desktopEdgeProbe?.dispose();desktopEdgeProbe=null;local('desktopRendering','default').catch(()=>{});leaveDesktopFullscreen();desktopGeneration++;const sid=desktopId;desktopId=null;if(desktopClient){try{desktopClient.disconnect();}catch(e){}desktopClient=null;}if(sid)api('/api/desktop/close/'+sid,{}).catch(()=>{});$('screen').replaceChildren();$('screen').style.width='';$('screen').style.height='';$('desktop-session').hidden=true;document.querySelector('.desktop-intro').hidden=false;$('desktop-connect').disabled=false;$('desktop-connect').textContent='连接桌面';$('desktop-text').value='';desktopConnecting=false;};
+let fullscreenDesktop=false,manualFullscreen=false,fullscreenDismissed=false,deviceLandscape=null,resizeDesktopTimer=null,desktopResizeFailureTimer=null,desktopResizeKey='',desktopResizeAttempts=0,desktopResizeReported=false;
 function isDesktopLandscape(){return deviceLandscape===null?matchMedia('(orientation: landscape)').matches:deviceLandscape;}
 function fitDesktop(){
  if(!desktopClient)return;
@@ -125,21 +125,34 @@ function setDesktopFullscreen(enabled){
 }
 function leaveDesktopFullscreen(){manualFullscreen=false;fullscreenDismissed=false;clearTimeout(resizeDesktopTimer);setDesktopFullscreen(false);$('keyboard-box').hidden=true;}
 function syncDesktopLayout(){setDesktopFullscreen(Boolean(desktopClient&&(manualFullscreen||isDesktopLandscape()&&!fullscreenDismissed)));fitDesktop();}
+function resetDesktopResizeRequest(){
+ clearTimeout(resizeDesktopTimer);clearTimeout(desktopResizeFailureTimer);desktopResizeFailureTimer=null;desktopResizeKey='';desktopResizeAttempts=0;desktopResizeReported=false;
+}
+function armDesktopResizeFailure(size,key){
+ if(desktopResizeFailureTimer!==null||desktopResizeReported)return;
+ const generation=desktopGeneration;
+ desktopResizeFailureTimer=setTimeout(()=>{
+  desktopResizeFailureTimer=null;if(generation!==desktopGeneration||!desktopClient||desktopResizeKey!==key)return;
+  const actual=desktopClient.getDisplay(),wanted=desktopRequestedSize();
+  if(wanted.width===size.width&&wanted.height===size.height&&(actual.getWidth()!==size.width||actual.getHeight()!==size.height)){
+   desktopResizeReported=true;$('desktop-status').textContent='远端未确认 '+size.width+' × '+size.height+' · 当前 '+actual.getWidth()+' × '+actual.getHeight();
+   toast('远端未确认新分辨率，当前画面保持不变；该桌面服务可能不支持动态调整');desktopTrace?.event('resize-unconfirmed');
+  }
+ },1600);
+}
 function resizeRemoteDesktop(attempt=0){
- if(!desktopClient||!$('keyboard-box').hidden)return;
- const d=desktopClient.getDisplay();
- // The open handshake already requests the initial size. Width/height of
- // zero mean no remote geometry has arrived, not a rejected resize. Wait
- // for onresize instead of sending five duplicate display updates.
- if(!d.getWidth()||!d.getHeight())return;
- let size;if(fullscreenDesktop&&$('resolution').value==='auto'){const v=$('screen-scroll');if(!v.clientWidth||!v.clientHeight)return;size=desktopSize(v.clientWidth,v.clientHeight,devicePixelRatio);}else{const [width,height]=($('resolution').value==='auto'?'1280,800':$('resolution').value).split(',').map(Number);size={width,height};}
- if(d.getWidth()!==size.width||d.getHeight()!==size.height){
-  desktopTrace?.sentSize(size.width,size.height);
-  desktopClient.sendSize(size.width,size.height);
-  // RDP's display-control channel can become ready after the first frame.
-  // Stop once confirmed; never replay a resize across desktop sessions.
-  if(attempt<4){const generation=desktopGeneration;clearTimeout(resizeDesktopTimer);resizeDesktopTimer=setTimeout(()=>{if(generation===desktopGeneration)resizeRemoteDesktop(attempt+1);},800*(attempt+1));}
- }
+ if(!desktopClient||!$('keyboard-box').hidden||desktopEditorFocused())return;
+ const d=desktopClient.getDisplay();if(!d.getWidth()||!d.getHeight())return;
+ const size=desktopRequestedSize(),key=desktopGeneration+':'+size.width+','+size.height;
+ if(desktopResizeKey!==key){resetDesktopResizeRequest();desktopResizeKey=key;attempt=0;}
+ if(d.getWidth()===size.width&&d.getHeight()===size.height){clearTimeout(resizeDesktopTimer);clearTimeout(desktopResizeFailureTimer);desktopResizeFailureTimer=null;desktopResizeReported=false;return;}
+ // Server size notifications may acknowledge a clamped/original size. Retain
+ // the same target's budget across those callbacks instead of restarting it.
+ attempt=Math.max(attempt,desktopResizeAttempts);
+ if(attempt>=5){armDesktopResizeFailure(size,key);return;}
+ desktopResizeAttempts=attempt+1;desktopTrace?.sentSize(size.width,size.height);desktopClient.sendSize(size.width,size.height);clearTimeout(resizeDesktopTimer);
+ if(desktopResizeAttempts<5){const generation=desktopGeneration;resizeDesktopTimer=setTimeout(()=>{if(generation===desktopGeneration)resizeRemoteDesktop(desktopResizeAttempts);},800*desktopResizeAttempts);}
+ else armDesktopResizeFailure(size,key);
 }
 window.setDeviceLandscape=function(landscape){if(deviceLandscape!==landscape){deviceLandscape=landscape;manualFullscreen=false;fullscreenDismissed=false;zoomed=false;syncDesktopLayout();scheduleDesktopResize();}};
 matchMedia('(orientation: landscape)').addEventListener('change',()=>{if(deviceLandscape!==null)return;manualFullscreen=false;fullscreenDismissed=false;zoomed=false;syncDesktopLayout();scheduleDesktopResize();});
@@ -151,7 +164,7 @@ $('desktop-connect').onclick=async()=>{if(desktopConnecting)return;if(!paired){t
  desktopTrace=new DesktopTrace();desktopTrace.event('render-mode',{mode:desktopRenderMode});
  await local('desktopRendering',desktopRenderMode).catch(()=>{});
  if(generation!==desktopGeneration)return;
- let [width,height]=($('resolution').value==='auto'?'1280,800':$('resolution').value).split(',').map(Number);if($('resolution').value==='auto'&&(isDesktopLandscape()||manualFullscreen)){const size=desktopSize(innerWidth,innerHeight,devicePixelRatio);width=size.width;height=size.height;}const data=await api('/api/desktop/open',{width,height});if(generation!==desktopGeneration){api('/api/desktop/close/'+data.id,{}).catch(()=>{});return;}desktopId=data.id;
+ const {width,height}=desktopRequestedSize(true);const data=await api('/api/desktop/open',{width,height});if(generation!==desktopGeneration){api('/api/desktop/close/'+data.id,{}).catch(()=>{});return;}desktopId=data.id;
  const tunnel=new Guacamole.Tunnel(),parser=new Guacamole.Parser();let writes='',writing=false,flushTimer=null;
  const trace=desktopTrace;
  parser.oninstruction=(opcode,args)=>{trace.received(opcode,args);if(tunnel.oninstruction)tunnel.oninstruction(opcode,args);};
@@ -169,7 +182,7 @@ $('desktop-connect').onclick=async()=>{if(desktopConnecting)return;if(!paired){t
  display.getElement().addEventListener('contextlost',()=>trace.event('contextlost'),true);
  display.getElement().addEventListener('contextrestored',()=>trace.event('contextrestored'),true);
  const protocolLabel=data.protocol==='vnc'?'VNC':data.protocol==='rdp'?'RDP':'远程桌面';
- display.onresize=()=>{fitDesktop();scheduleDesktopResize();$('desktop-status').textContent='已连接 · '+protocolLabel+' · '+display.getWidth()+' × '+display.getHeight();};client.onerror=e=>fail('桌面连接中断：'+(e.message||'请重试'));client.onstatechange=state=>{if(state===Guacamole.Client.State.CONNECTED){clearTimeout(resizeDesktopTimer);resizeDesktopTimer=setTimeout(resizeRemoteDesktop,100);}};
+ display.onresize=()=>{fitDesktop();const wanted=desktopRequestedSize();if(display.getWidth()===wanted.width&&display.getHeight()===wanted.height)desktopResizeReported=false;scheduleDesktopResize();$('desktop-status').textContent='已连接 · '+protocolLabel+' · '+display.getWidth()+' × '+display.getHeight()+(desktopResizeReported?' · 分辨率请求未确认':'');};client.onerror=e=>fail('桌面连接中断：'+(e.message||'请重试'));client.onstatechange=state=>{if(state===Guacamole.Client.State.CONNECTED){clearTimeout(resizeDesktopTimer);resizeDesktopTimer=setTimeout(resizeRemoteDesktop,100);}};
  desktopEdgeProbe=new DesktopEdgeProbe(()=>{
   if(document.body.classList.contains('desktop-controls-open')||document.body.classList.contains('desktop-sampling'))return {window:{available:false,reason:'controls-open'}};
   return desktopSample(client);
@@ -240,7 +253,7 @@ $('desk-inspect').onclick=async()=>{
   if(generation!==desktopGeneration)return;
   const after=await desktopSample(client);
   if(generation!==desktopGeneration)return;
-  const report={version:'0.6.0-beta.5',build:26,mode:desktopRenderMode,cursorPositioning:'layout',sampling:{controlsHidden:true,mayTriggerRepaint:true,automaticEdgeCapture:true},edges:desktopEdgeProbe?.snapshot()||[],before,after,trace:desktopTrace.snapshot()};
+  const report={version:'0.6.0-beta.6',build:27,mode:desktopRenderMode,cursorPositioning:'layout',sampling:{controlsHidden:true,mayTriggerRepaint:true,automaticEdgeCapture:true},edges:desktopEdgeProbe?.snapshot()||[],before,after,trace:desktopTrace.snapshot()};
   try{localStorage.setItem('desktop-last-report',JSON.stringify(report));}catch(e){}
   showDesktopReport(report);
  }catch(e){toast('画面仍在调整，请稍后再检查');}finally{document.body.classList.remove('desktop-sampling');button.disabled=false;}

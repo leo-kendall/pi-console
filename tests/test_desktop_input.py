@@ -19,11 +19,11 @@ SDK={
  }''',
  'android/view/MotionEvent.java':'''package android.view;public class MotionEvent {
  public static final int ACTION_DOWN=0,ACTION_UP=1,ACTION_MOVE=2,ACTION_CANCEL=3,ACTION_HOVER_MOVE=7,ACTION_SCROLL=8,ACTION_BUTTON_PRESS=11,ACTION_BUTTON_RELEASE=12,AXIS_VSCROLL=9,AXIS_HSCROLL=10;
- public boolean isFromSource(int s){return true;}public int getActionMasked(){return 0;}public int getButtonState(){return 1;}public float getX(){return 100;}public float getY(){return 100;}public float getAxisValue(int a){return 0;}
+ public int action=0,buttons=1;public float x=100,y=100;public MotionEvent(){}public MotionEvent(int a,float xx,float yy,int b){action=a;x=xx;y=yy;buttons=b;}public boolean isFromSource(int s){return true;}public int getActionMasked(){return action;}public int getButtonState(){return buttons;}public float getX(){return x;}public float getY(){return y;}public float getAxisValue(int a){return 0;}
  }''',
  'android/webkit/WebView.java':'''package android.webkit;public class WebView {
  public interface MotionListener {boolean event(WebView v,android.view.MotionEvent e);}
- public java.util.List<String> events=new java.util.ArrayList<>();public MotionListener touch;
+ public java.util.List<String> events=new java.util.ArrayList<>();public MotionListener touch;public int left,right,top,bottom;public int getPaddingLeft(){return left;}public int getPaddingRight(){return right;}public int getPaddingTop(){return top;}public int getPaddingBottom(){return bottom;}
  public void setOnGenericMotionListener(MotionListener l){}public void setOnTouchListener(MotionListener l){touch=l;}
  public void evaluateJavascript(String s,Object cb){events.add(s);}public int getWidth(){return 1000;}public int getHeight(){return 500;}
  }''',
@@ -51,7 +51,17 @@ SDK={
   d.setShortcutSession("");w.events.clear();check(!key(d,62,true,true,true,0),"disconnected session has no hotkey");check(w.events.isEmpty(),"no stale session event after disconnect");
   d.setShortcutSession("new");d.setSession("new");d.setRegion(new JSONObject().put("left",0).put("top",0).put("right",1).put("bottom",1));check(w.touch.event(w,new android.view.MotionEvent()),"remote mouse consumed");
   d.setSession("");check(!w.touch.event(w,new android.view.MotionEvent()),"phone target mouse passed to WebView");d.readClipboard();
-  d.setSession("new");d.setRegion(new JSONObject().put("left",0).put("top",0).put("right",1).put("bottom",1).put("exclude",new org.json.JSONArray().put(new JSONObject().put("left",.05).put("top",.05).put("right",.2).put("bottom",.4))));check(!w.touch.event(w,new android.view.MotionEvent()),"overlaid local control bypasses native mouse forwarding");d.setSession("");
+  d.setSession("new");w.left=49;w.right=49;w.top=11;w.bottom=11;w.events.clear();
+  d.setRegion(new JSONObject().put("left",0).put("top",0).put("right",1).put("bottom",1));
+  check(w.touch.event(w,new android.view.MotionEvent(0,274.5f,130.5f,1)),"padded content mouse consumed");
+  check(w.events.toString().contains("x=0.25, y=0.25"),"mouse coordinates must exclude native safe padding before CSS normalization");
+  check(w.touch.event(w,new android.view.MotionEvent(1,0,0,0)),"drag release in safe padding still reaches remote");
+  check(!w.touch.event(w,new android.view.MotionEvent(7,0,0,0)),"safe padding hover stays local after release");
+  d.setRegion(new JSONObject().put("left",0).put("top",0).put("right",1).put("bottom",1).put("exclude",new org.json.JSONArray().put(new JSONObject().put("left",.2).put("top",.2).put("right",.3).put("bottom",.3))));
+  check(!w.touch.event(w,new android.view.MotionEvent(0,274.5f,130.5f,1)),"padded CSS local control remains local");
+  w.left=500;w.right=500;check(!w.touch.event(w,new android.view.MotionEvent()),"empty content refuses mouse");
+  w.left=0;w.right=0;w.top=0;w.bottom=0;
+  d.setRegion(new JSONObject().put("left",0).put("top",0).put("right",1).put("bottom",1).put("exclude",new org.json.JSONArray().put(new JSONObject().put("left",.05).put("top",.05).put("right",.2).put("bottom",.4))));check(!w.touch.event(w,new android.view.MotionEvent()),"overlaid local control bypasses native mouse forwarding");d.setSession("");
   d.setShortcutSession("");boolean refused=false;try{d.readClipboard();}catch(IllegalStateException expected){refused=true;}check(refused,"clipboard requires registered foreground desktop");
   System.out.println("Native routing releases keys, consumes chord/repeats, scopes sessions/focus/IME, restores phone mouse and bounds clipboard access (Android API fakes)");
  }

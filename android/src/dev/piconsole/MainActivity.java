@@ -4,8 +4,6 @@ package dev.piconsole;
 import android.app.Activity;
 import android.os.Bundle;
 import android.os.Build;
-import android.view.WindowInsets;
-import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.*;
 import android.view.View;
@@ -19,10 +17,12 @@ import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
  private WebView web;
+ private android.widget.FrameLayout webFrame;
  private FileTransfer files;
  private BackupTransfer backup;
  private TextExport textExport;
  private DesktopInput desktopInput;
+ private DesktopViewport desktopViewport;
  private boolean desktopFullscreen=false;
  private final ExecutorService pool=Executors.newFixedThreadPool(4);
  private final java.util.concurrent.atomic.AtomicInteger pending=new java.util.concurrent.atomic.AtomicInteger();
@@ -35,12 +35,11 @@ public final class MainActivity extends Activity {
   getWindow().getDecorView().setSystemUiVisibility(dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
   web=new WebView(this);web.setBackgroundColor(bg);
   getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-  web.setOnApplyWindowInsetsListener((v,insets)->{
-   int left=0,right=0,top=desktopFullscreen?0:insets.getSystemWindowInsetTop(),bottom=desktopFullscreen?0:insets.getSystemWindowInsetBottom();
-   if(Build.VERSION.SDK_INT>=28 && insets.getDisplayCutout()!=null){android.view.DisplayCutout cutout=insets.getDisplayCutout();left=cutout.getSafeInsetLeft();right=cutout.getSafeInsetRight();if(desktopFullscreen){top=cutout.getSafeInsetTop();bottom=cutout.getSafeInsetBottom();}}
-   v.setPadding(left,top,right,bottom);return insets;
-  });
-  setContentView(web);files=new FileTransfer(this);backup=new BackupTransfer(this);textExport=new TextExport(this);desktopInput=new DesktopInput(this,web);
+  desktopViewport=new DesktopViewport(getWindow());
+  webFrame=new android.widget.FrameLayout(this);webFrame.setBackgroundColor(bg);
+  webFrame.addView(web,new android.widget.FrameLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT,android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+  webFrame.setOnApplyWindowInsetsListener((v,insets)->{desktopViewport.applyInsets(v,insets);return desktopViewport.remainingInsets(insets);});
+  setContentView(webFrame);files=new FileTransfer(this);backup=new BackupTransfer(this);textExport=new TextExport(this);desktopInput=new DesktopInput(this,web);
   WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setAllowFileAccess(false);s.setAllowContentAccess(false);
   s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);s.setTextZoom(Math.round(100*getResources().getConfiguration().fontScale));
   web.addJavascriptInterface(new Bridge(),"Pi");
@@ -50,7 +49,7 @@ public final class MainActivity extends Activity {
     String url=r.getUrl().toString();
     if(!url.startsWith(origin))return blocked();
     String name=url.substring(origin.length());
-    if(!Arrays.asList("index.html","style.css","app.js","app-state.js","setup-ui.js","resources-ui.js","process-ui.js","tools-ui.js","files-ui.js","guacamole.js","desktop-layout.js","desktop-diagnostics.js","desktop-ui.js","profiles-ui.js","updates-ui.js","admin-ui.js","observability-ui.js","observability.css","files-ui.css").contains(name))return blocked();
+    if(!Arrays.asList("index.html","style.css","app.js","app-state.js","setup-ui.js","resources-ui.js","process-ui.js","tools-ui.js","files-ui.js","guacamole.js","desktop-layout.js","desktop-settings.js","desktop-diagnostics.js","desktop-ui.js","profiles-ui.js","updates-ui.js","admin-ui.js","observability-ui.js","observability.css","files-ui.css").contains(name))return blocked();
     try {
      String mime=name.endsWith(".html")?"text/html":name.endsWith(".css")?"text/css":"application/javascript";
      Map<String,String> headers=new HashMap<>();headers.put("Content-Security-Policy","default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data: blob:; media-src data: blob:; connect-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'");
@@ -64,16 +63,11 @@ public final class MainActivity extends Activity {
  private void notifyOrientation(){if(web!=null)web.evaluateJavascript("window.setDeviceLandscape&&setDeviceLandscape("+(getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE)+")",null);}
  private void setDesktopFullscreen(boolean enabled){
   desktopFullscreen=enabled;
-  View decor=getWindow().getDecorView();
-  if(Build.VERSION.SDK_INT>=30){
-   WindowInsetsController controller=getWindow().getInsetsController();
-   if(controller!=null){if(enabled){controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);controller.hide(WindowInsets.Type.systemBars());}else controller.show(WindowInsets.Type.systemBars());}
-  }else{
-   boolean dark=(getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;
-   decor.setSystemUiVisibility(enabled?View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY|View.SYSTEM_UI_FLAG_LAYOUT_STABLE:(dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR));
-  }
-  if(enabled)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-  if(web!=null)web.requestApplyInsets();
+  boolean dark=(getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;
+  if(desktopViewport!=null)desktopViewport.setFullscreen(enabled,dark);
+  int background=enabled?android.graphics.Color.rgb(8,9,11):android.graphics.Color.parseColor(dark?"#101114":"#F3F4F7");
+  if(web!=null)web.setBackgroundColor(background);
+  if(webFrame!=null){webFrame.setBackgroundColor(background);webFrame.requestApplyInsets();}
  }
  @Override public void onConfigurationChanged(Configuration configuration){super.onConfigurationChanged(configuration);notifyOrientation();if(web!=null)web.getSettings().setTextZoom(Math.round(100*configuration.fontScale));setDesktopFullscreen(desktopFullscreen);}
  @Override public void onWindowFocusChanged(boolean focused){super.onWindowFocusChanged(focused);if(desktopInput!=null)desktopInput.focusChanged(focused);if(focused&&desktopFullscreen)setDesktopFullscreen(true);}

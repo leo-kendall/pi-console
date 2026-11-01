@@ -20,3 +20,22 @@ for(const [w,h,density] of [[821,394,3],[873,393,2.75],[412,915,2.625]]){
 }
 
 console.log('Desktop fit, adaptive resolution and codec alignment tests passed');
+
+const {requestedDesktopSize,fixedDesktopAspect,checkedDesktopResolution}=require('../android/assets/desktop-layout.js');
+assert.equal(typeof requestedDesktopSize,'function','Resolution selection must support auto, fixed and aspect-constrained sizes');
+assert.deepEqual(requestedDesktopSize('1920,1080','original',392,802,3),{width:1920,height:1080},'Fixed size ignores phone orientation/density');
+assert.deepEqual(requestedDesktopSize('auto','16:9',800,450,2),{width:1600,height:900});
+assert.deepEqual(requestedDesktopSize('auto','4:3',800,450,2),{width:1200,height:900});
+assert.deepEqual(requestedDesktopSize('auto','16:10',800,450,2),{width:1440,height:900});
+assert.deepEqual(fixedDesktopAspect(1280,800,'16:9'),{width:1280,height:720});
+assert.deepEqual(fixedDesktopAspect(2560,1440,'4:3'),{width:1920,height:1440},'Ratio conversion respects server height ceiling');
+assert.deepEqual(fixedDesktopAspect(640,480,'21:9'),{width:1120,height:480},'Ultrawide ratio respects minimum height');
+assert.deepEqual(fixedDesktopAspect(1920,1080,'16:10'),{width:1920,height:1200});
+assert.deepEqual(checkedDesktopResolution('2560,1440'),{width:2560,height:1440});
+for(const bad of ['639,480','2562,1440','1920,1442','1921,1080','1920,1079','auto','1920x1080','1e3,800','NaN,800'])assert.throws(()=>checkedDesktopResolution(bad),'Invalid or codec-unaligned sizes must be rejected: '+bad);
+for(const ratio of ['16:9','16:10','4:3','3:2','21:9'])for(const [w,h,d] of [[320,640,2.75],[818,392,3],[1920,1080,3]]){
+ const size=requestedDesktopSize('auto',ratio,w,h,d),[a,b]=ratio.split(':').map(Number);
+ assert(size.width>=640&&size.width<=2560&&size.height>=480&&size.height<=1440);
+ assert.equal(size.width%2,0);assert.equal(size.height%2,0);assert(Math.abs(size.width/size.height-a/b)<.006,'Aspect must remain undistorted');
+}
+console.log('Desktop fixed/auto/aspect selections, server bounds and custom pixel validation passed');

@@ -72,9 +72,10 @@ final class DesktopInput {
   if(session.isEmpty()||!focused||!event.isFromSource(InputDevice.SOURCE_MOUSE))return false;
   int action=event.getActionMasked();
   if(action!=MotionEvent.ACTION_DOWN&&action!=MotionEvent.ACTION_UP&&action!=MotionEvent.ACTION_MOVE&&action!=MotionEvent.ACTION_HOVER_MOVE&&action!=MotionEvent.ACTION_SCROLL&&action!=MotionEvent.ACTION_BUTTON_PRESS&&action!=MotionEvent.ACTION_BUTTON_RELEASE&&action!=MotionEvent.ACTION_CANCEL)return false;
-  if(web.getWidth()<=0||web.getHeight()<=0)return false;
+  int contentWidth=web.getWidth()-web.getPaddingLeft()-web.getPaddingRight(),contentHeight=web.getHeight()-web.getPaddingTop()-web.getPaddingBottom();
+  if(contentWidth<=0||contentHeight<=0)return false;
   int buttons=action==MotionEvent.ACTION_CANCEL?0:event.getButtonState();
-  double[] point=pointer.sample(event.getX()/web.getWidth(),event.getY()/web.getHeight(),buttons);if(point==null)return false;
+  double[] point=pointer.sample((event.getX()-web.getPaddingLeft())/contentWidth,(event.getY()-web.getPaddingTop())/contentHeight,buttons);if(point==null)return false;
   try{
    emit(new JSONObject().put("type","mouse").put("x",point[0]).put("y",point[1]).put("buttons",buttons).put("wheel",action==MotionEvent.ACTION_SCROLL?event.getAxisValue(MotionEvent.AXIS_VSCROLL):0).put("horizontal",action==MotionEvent.ACTION_SCROLL?event.getAxisValue(MotionEvent.AXIS_HSCROLL):0));
   }catch(Exception ignored){}

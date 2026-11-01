@@ -300,6 +300,15 @@ public final class CompatInstrumentation extends Instrumentation {
         return result;
     }
 
+    private void selectResolution(String value) throws Exception {
+        js("(()=>{$('desk-display').click();return true;})()");
+        waitJs("$('sheet').open&&Boolean($('desktop-size-choice')&&$('desktop-ratio-choice')"
+            + "&&$('desktop-custom-width')&&$('desktop-custom-height')&&$('desktop-display-apply'))", "resolution-selectors");
+        js("(()=>{$('desktop-size-choice').value=" + JSONObject.quote(value)
+            + ";$('desktop-size-choice').dispatchEvent(new Event('change'));$('desktop-display-apply').click();return true;})()");
+        waitJs("!$('sheet').open&&$('resolution').value===" + JSONObject.quote(value), "fixed-resolution-setting");
+    }
+
     private void rotate(int requested, int configuration, boolean landscape) throws Exception {
         main(() -> activity.setRequestedOrientation(requested));
         long deadline = SystemClock.uptimeMillis() + 15000;
@@ -359,8 +368,11 @@ public final class CompatInstrumentation extends Instrumentation {
             String setup = asset("setup.js");
             js("(()=>{" + setup + "\nreturn true;})()");
             waitJs("Boolean(desktopClient&&desktopClient.getDisplay().getWidth()===1280)", "initial-frame");
+            check(Boolean.TRUE.equals(js("window.__compatOpened.width===1280&&window.__compatOpened.height===800")),
+                "initial-open-dimensions");
             scenario("portrait-1280", false);
-            js("(()=>{$('resolution').value='2560,1440';window.__compatIncoming=__compatColor(2560,1440);return true;})()");
+            selectResolution("2560,1440");
+            waitJs("window.__compatSizes.some(s=>s[0]===2560&&s[1]===1440)", "outbound-2560-request");
             waitJs("desktopClient.getDisplay().getWidth()===2560", "resized-frame");
             scenario("portrait-2560", false);
             js("(()=>{$('desk-fullscreen').click();return true;})()");
@@ -373,12 +385,11 @@ public final class CompatInstrumentation extends Instrumentation {
                 "normal-insets-not-restored");
             check(normal.getJSONArray("web").toString().equals(restored.getJSONArray("web").toString()),
                 "normal-web-bounds-not-restored");
-            js("(()=>{$('desk-display').click();return true;})()");
-            waitJs("$('sheet').open&&Boolean($('desktop-size-choice')&&$('desktop-ratio-choice')"
-                + "&&$('desktop-custom-width')&&$('desktop-custom-height')&&$('desktop-display-apply'))", "resolution-selectors");
-            js("(()=>{$('desktop-size-choice').value='1920,1080';$('desktop-size-choice').dispatchEvent(new Event('change'));"
-                + "$('desktop-display-apply').click();return true;})()");
-            waitJs("!$('sheet').open&&$('resolution').value==='1920,1080'", "fixed-resolution-setting");
+            selectResolution("1920,1080");
+            waitJs("window.__compatSizes.some(s=>s[0]===1920&&s[1]===1080)", "outbound-1920-request");
+            waitJs("desktopClient.getDisplay().getWidth()===1920&&desktopClient.getDisplay().getHeight()===1080",
+                "fixed-resolution-acknowledgement");
+            report.put("requestedSizes", js("window.__compatSizes"));
             report.put("resolutionSelectors", true).put("syntheticTransport", true);
             check(Boolean.TRUE.equals(js("window.__compatTransportCalls>0&&window.__compatErrors===0")), "transport-or-js-errors");
             js("(()=>{stopDesktop();pauseApp();return true;})()");

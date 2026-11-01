@@ -32,6 +32,7 @@ jobs:
           node tests/test_app_state.cjs
           node tests/test_desktop_layout.cjs
           node tests/test_webview_readiness.cjs
+          node tests/test_android_compat_transport.cjs
           node tests/test_desktop_diagnostics.cjs
           node tests/test_desktop_edge_probe.cjs
           node tests/test_observability_ui.cjs

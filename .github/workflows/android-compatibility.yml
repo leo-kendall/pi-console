@@ -38,25 +38,7 @@ jobs:
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
-          script: |
-            set -eu
-            test "$(adb -s emulator-5554 shell getprop ro.kernel.qemu | tr -d '\r')" = 1
-            compat_full_flag=""
-            if [ "${{ matrix.api }}" -ge 33 ]; then compat_full_flag="--require-full-ui"; fi
-            adb -s emulator-5554 shell wm size 1080x1920
-            adb -s emulator-5554 shell wm density 420
-            python3 -B scripts/test_android_compat.py --run --serial emulator-5554 --label api${{ matrix.api }}-16x9 $compat_full_flag
-            adb -s emulator-5554 shell wm size 1080x2400
-            python3 -B scripts/test_android_compat.py --run --serial emulator-5554 --label api${{ matrix.api }}-20x9 $compat_full_flag
-            if [ "${{ matrix.api }}" -ge 28 ]; then
-              if adb -s emulator-5554 shell cmd overlay list | grep -q 'com.android.internal.display.cutout.emulation.corner'; then
-                adb -s emulator-5554 shell cmd overlay enable --user 0 com.android.internal.display.cutout.emulation.corner
-                python3 -B scripts/test_android_compat.py --run --serial emulator-5554 --label api${{ matrix.api }}-corner-cutout $compat_full_flag
-                adb -s emulator-5554 shell cmd overlay disable --user 0 com.android.internal.display.cutout.emulation.corner
-              else
-                echo 'Cutout overlay unavailable in this system image; no cutout run claimed.'
-              fi
-            fi
+          script: bash scripts/run_android_compat_matrix.sh ${{ matrix.api }}
       - name: Preserve numeric compatibility evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

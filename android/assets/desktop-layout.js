@@ -21,4 +21,21 @@ function positionDesktopCursor(display){
  };
  cursor.translate(cursor.x,cursor.y);
 }
+function configureDesktopScaling(display,initialMode){
+ const root=display.getElement().firstElementChild,scale=display.scale;
+ // Guacamole canvases use z-index:-1. Preserve their stacking context when
+ // removing the transform so they cannot fall behind the viewport background.
+ root.style.isolation='isolate';
+ let mode='transform';
+ const supported=typeof CSS!=='undefined'&&CSS.supports('zoom','1');
+ display.scale=function(value){
+  // Retain Guacamole's scale metadata and input bounds. Layout zoom avoids
+  // scaling a retained compositor surface after a remote framebuffer resize.
+  scale.call(display,value);
+  root.style.zoom=mode==='layout'?String(value):'1';
+  if(mode==='layout')for(const name of ['transform','WebkitTransform','MozTransform','OTransform','msTransform'])root.style[name]='none';
+ };
+ const controller={get mode(){return mode;},setMode(value){mode=value==='layout'&&supported?'layout':'transform';display.scale(display.getScale());return mode;}};
+ controller.setMode(initialMode);return controller;
+}
 if(typeof module!=='undefined')module.exports={fitScale,desktopSize};

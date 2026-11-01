@@ -1,9 +1,34 @@
 'use strict';
 let desktopClient=null,desktopId=null,desktopGeneration=0,desktopConnecting=false,desktopMouse=null,zoomed=false;
 let desktopEdgeProbe=null;
-let desktopTrace=null,desktopRenderMode=localStorage.getItem('desktop-render-mode')==='default'?'default':'software';
+let desktopTrace=null,desktopRenderMode=localStorage.getItem('desktop-render-mode')==='software'?'software':'default';
+let desktopScaling=null,desktopPresentation=localStorage.getItem('desktop-presentation')==='transform'?'transform':'layout';
 let desktopKeyboard=null,desktopHeld=new Map(),desktopRemoteClipboard='',desktopClipboardAvailable=false,desktopNativeMouse=null,desktopBrowserMouse=null;
+let desktopInputRemote=true,desktopShortcutHeld=false;
 const DESKTOP_CLIPBOARD_LIMIT=16384;
+function setDesktopInputTarget(remote){
+ if(!desktopClient)return;
+ releaseDesktopInput();desktopInputRemote=Boolean(remote);
+ const button=$('desk-input-target');button.textContent=desktopInputRemote?'键鼠：远程':'键鼠：手机';button.setAttribute('aria-pressed',String(desktopInputRemote));
+ if(desktopKeyboard){desktopKeyboard.onkeydown=desktopInputRemote?desktopBrowserKeyDown:null;desktopKeyboard.onkeyup=desktopInputRemote?desktopBrowserKeyUp:null;}
+ setNativeDesktopInput(true);
+ if(desktopInputRemote&&!desktopEditorFocused())desktopClient.getDisplay().getElement().focus({preventScroll:true});
+ else if(!desktopInputRemote&&desktopClient.getDisplay().getElement().contains(document.activeElement))button.focus({preventScroll:true});
+ toast(desktopInputRemote?'键鼠控制远程桌面 · Ctrl+Alt+空格切回手机':'键鼠控制手机 · Ctrl+Alt+空格切回远程');
+}
+function desktopBrowserKeyDown(key){if(desktopInputRemote)desktopKeyState(key,true,'browser');return !desktopInputRemote;}
+function desktopBrowserKeyUp(key){if(desktopInputRemote)desktopKeyState(key,false,'browser');}
+// Native Activity handles physical keys first. This also supports the browser
+// preview and WebViews that deliver a hardware chord through DOM events.
+document.addEventListener('keydown',event=>{
+ if(!desktopClient||event.isComposing||!(event.code==='Space'||event.keyCode===32))return;
+ if(!desktopShortcutHeld&&!(event.ctrlKey&&event.altKey))return;
+ event.preventDefault();event.stopImmediatePropagation();
+ if(!desktopShortcutHeld&&!event.repeat)setDesktopInputTarget(!desktopInputRemote);
+ desktopShortcutHeld=true;
+},true);
+document.addEventListener('keyup',event=>{if(desktopShortcutHeld&&(event.code==='Space'||event.keyCode===32)){desktopShortcutHeld=false;event.preventDefault();event.stopImmediatePropagation();}},true);
+$('desk-input-target').onclick=()=>setDesktopInputTarget(!desktopInputRemote);
 function desktopKeyState(key,down,source){
  if(!desktopClient||!Number.isInteger(key)||key<0||key>0x1ffffff)return;
  let sources=desktopHeld.get(key);
@@ -18,15 +43,18 @@ function releaseDesktopInput(){
  document.querySelectorAll('[data-modifier]').forEach(b=>b.setAttribute('aria-pressed','false'));
 }
 function desktopEditorFocused(){const e=document.activeElement;return Boolean(e&&(e.matches('input,textarea,select,[contenteditable=true]')))||Boolean($('sheet')?.open);}
-function setNativeDesktopInput(enabled){local('desktopInput',enabled&&desktopClient&&!desktopEditorFocused()?desktopId:'').catch(()=>{});updateNativeDesktopRegion();}
+function setNativeDesktopInput(enabled){local('desktopInput',enabled&&desktopClient&&desktopInputRemote&&!desktopEditorFocused()?desktopId:'').catch(()=>{});updateNativeDesktopRegion();}
 function updateNativeDesktopRegion(){
- const b=$('screen').getBoundingClientRect(),allowed=desktopClient&&!desktopEditorFocused()&&!document.body.classList.contains('desktop-controls-open'),clamp=v=>Math.max(0,Math.min(1,v));
- local('desktopInputRegion',allowed?{left:clamp(b.left/innerWidth),top:clamp(b.top/innerHeight),right:clamp(b.right/innerWidth),bottom:clamp(b.bottom/innerHeight)}:{left:0,top:0,right:0,bottom:0}).catch(()=>{});
+ const b=$('screen').getBoundingClientRect(),allowed=desktopClient&&desktopInputRemote&&!desktopEditorFocused()&&!document.body.classList.contains('desktop-controls-open'),clamp=v=>Math.max(0,Math.min(1,v));
+ const rect=b=>({left:clamp(b.left/innerWidth),top:clamp(b.top/innerHeight),right:clamp(b.right/innerWidth),bottom:clamp(b.bottom/innerHeight)});
+ const exclude=['desk-input-target','desk-controls'].map(id=>rect($(id).getBoundingClientRect())).filter(e=>e.right>e.left&&e.bottom>e.top);
+ local('desktopInputRegion',allowed?{...rect(b),exclude}:{left:0,top:0,right:0,bottom:0}).catch(()=>{});
 }
 window.desktopNativeInput=function(event){
  if(!desktopClient||event.session!==desktopId)return;
  if(event.type==='reset'){releaseDesktopInput();return;}
- if(desktopEditorFocused())return;
+ if(event.type==='toggle-target'){setDesktopInputTarget(!desktopInputRemote);return;}
+ if(!desktopInputRemote||desktopEditorFocused())return;
  if(event.type==='key'){desktopKeyState(event.keysym,Boolean(event.down),'native');return;}
  if(event.type!=='mouse'||![event.x,event.y,event.buttons,event.wheel||0,event.horizontal||0].every(Number.isFinite))return;
  const d=desktopClient.getDisplay(),b=$('screen').getBoundingClientRect(),x=event.x*innerWidth-b.left,y=event.y*innerHeight-b.top;
@@ -42,8 +70,11 @@ window.desktopNativeInput=function(event){
 };
 function updateDesktopClipboard(){const b=$('desk-clipboard-receive');if(b)b.disabled=!desktopClient||!desktopClipboardAvailable;}
 function configureDesktopInput(client,generation){
- const display=client.getDisplay().getElement();display.tabIndex=0;display.setAttribute('aria-label','远程桌面硬件键盘输入');display.addEventListener('pointerdown',()=>display.focus({preventScroll:true}));
- desktopKeyboard=new Guacamole.Keyboard(display);desktopKeyboard.onkeydown=key=>{desktopKeyState(key,true,'browser');return false;};desktopKeyboard.onkeyup=key=>desktopKeyState(key,false,'browser');
+ const display=client.getDisplay().getElement();display.tabIndex=0;display.setAttribute('aria-label','远程桌面硬件键盘输入');display.addEventListener('pointerdown',()=>{if(desktopInputRemote)display.focus({preventScroll:true});});
+ // Let phone-target mouse events retain browser defaults, ahead of Guacamole's
+ // unconditional preventDefault handlers. Touch input remains available.
+ for(const type of ['mousedown','mouseup','mousemove','wheel','contextmenu'])display.addEventListener(type,event=>{if(!desktopInputRemote)event.stopImmediatePropagation();},true);
+ desktopKeyboard=new Guacamole.Keyboard(display);desktopKeyboard.onkeydown=desktopBrowserKeyDown;desktopKeyboard.onkeyup=desktopBrowserKeyUp;
  client.onclipboard=(stream,mime)=>{
   if(mime!=='text/plain'){stream.sendAck('Only plain text clipboard is supported',0x0100);return;}
   let text='',bytes=0,failed=false;const reader=new Guacamole.StringReader(stream);
@@ -53,14 +84,14 @@ function configureDesktopInput(client,generation){
  };
  updateDesktopClipboard();
 }
-window.addEventListener('blur',()=>{releaseDesktopInput();setNativeDesktopInput(false);});
+window.addEventListener('blur',()=>{desktopShortcutHeld=false;releaseDesktopInput();setNativeDesktopInput(false);});
 window.addEventListener('focus',()=>setNativeDesktopInput(true));
 document.addEventListener('visibilitychange',()=>{if(document.hidden){releaseDesktopInput();setNativeDesktopInput(false);}else setNativeDesktopInput(true);});
 document.addEventListener('focusin',()=>{if(desktopEditorFocused())releaseDesktopInput();setNativeDesktopInput(true);});
 document.addEventListener('focusout',()=>setTimeout(()=>setNativeDesktopInput(true),0));
 window.addEventListener('error',()=>desktopTrace?.event('window-error'));
 window.addEventListener('unhandledrejection',()=>desktopTrace?.event('decode-error'));
-window.stopDesktop=function(){releaseDesktopInput();setNativeDesktopInput(false);desktopRemoteClipboard='';desktopClipboardAvailable=false;updateDesktopClipboard();desktopKeyboard?.reset();desktopKeyboard=null;desktopBrowserMouse=null;desktopEdgeProbe?.dispose();desktopEdgeProbe=null;local('desktopRendering','default').catch(()=>{});leaveDesktopFullscreen();desktopGeneration++;const sid=desktopId;desktopId=null;if(desktopClient){try{desktopClient.disconnect();}catch(e){}desktopClient=null;}if(sid)api('/api/desktop/close/'+sid,{}).catch(()=>{});$('screen').replaceChildren();$('screen').style.width='';$('screen').style.height='';$('desktop-session').hidden=true;document.querySelector('.desktop-intro').hidden=false;$('desktop-connect').disabled=false;$('desktop-connect').textContent='连接桌面';$('desktop-text').value='';desktopConnecting=false;};
+window.stopDesktop=function(){desktopShortcutHeld=false;local('desktopInputShortcut','').catch(()=>{});releaseDesktopInput();setNativeDesktopInput(false);desktopRemoteClipboard='';desktopClipboardAvailable=false;updateDesktopClipboard();desktopKeyboard?.reset();desktopKeyboard=null;desktopBrowserMouse=null;desktopScaling=null;desktopEdgeProbe?.dispose();desktopEdgeProbe=null;local('desktopRendering','default').catch(()=>{});leaveDesktopFullscreen();desktopGeneration++;const sid=desktopId;desktopId=null;if(desktopClient){try{desktopClient.disconnect();}catch(e){}desktopClient=null;}if(sid)api('/api/desktop/close/'+sid,{}).catch(()=>{});$('screen').replaceChildren();$('screen').style.width='';$('screen').style.height='';$('desktop-session').hidden=true;document.querySelector('.desktop-intro').hidden=false;$('desktop-connect').disabled=false;$('desktop-connect').textContent='连接桌面';$('desktop-text').value='';desktopConnecting=false;};
 let fullscreenDesktop=false,manualFullscreen=false,fullscreenDismissed=false,deviceLandscape=null,resizeDesktopTimer=null;
 function isDesktopLandscape(){return deviceLandscape===null?matchMedia('(orientation: landscape)').matches:deviceLandscape;}
 function fitDesktop(){
@@ -129,8 +160,10 @@ $('desktop-connect').onclick=async()=>{if(desktopConnecting)return;if(!paired){t
  tunnel.sendMessage=(...args)=>{if(generation!==desktopGeneration)return;writes+=args.map(v=>{const s=String(v);return Array.from(s).length+'.'+s;}).join(',')+';';if(writes.length>30000){fail('输入队列已满，请重新连接');return;}clearTimeout(flushTimer);flushTimer=setTimeout(flush,20);};
  tunnel.connect=()=>{tunnel.uuid=data.id;tunnel.setState(Guacamole.Tunnel.State.OPEN);(async()=>{while(generation===desktopGeneration){try{const response=await api('/api/desktop/read/'+data.id);if(generation!==desktopGeneration)break;if(response.data)parser.receive(response.data);}catch(e){fail(e.message);break;}}})();};
  tunnel.disconnect=()=>{clearTimeout(flushTimer);tunnel.setState(Guacamole.Tunnel.State.CLOSED);};
+ desktopInputRemote=true;$('desk-input-target').textContent='键鼠：远程';$('desk-input-target').setAttribute('aria-pressed','true');
  desktopClient=new Guacamole.Client(tunnel);const client=desktopClient,display=client.getDisplay();configureDesktopInput(client,generation);$('screen').replaceChildren(display.getElement());$('desktop-session').hidden=false;document.querySelector('.desktop-intro').hidden=true;$('desktop-status').textContent='正在等待服务器桌面…';
  positionDesktopCursor(display);
+ desktopScaling=configureDesktopScaling(display,desktopPresentation);trace.event('presentation',{mode:desktopScaling.mode});
  const flushDisplay=display.flush;
  display.flush=function(callback,...args){return flushDisplay.call(display,()=>{trace.rendered();if(callback)callback();},...args);};
  display.getElement().addEventListener('contextlost',()=>trace.event('contextlost'),true);
@@ -141,9 +174,10 @@ $('desktop-connect').onclick=async()=>{if(desktopConnecting)return;if(!paired){t
   if(document.body.classList.contains('desktop-controls-open')||document.body.classList.contains('desktop-sampling'))return {window:{available:false,reason:'controls-open'}};
   return desktopSample(client);
  });const edgeProbe=desktopEdgeProbe;
- const sendMouse=state=>{client.sendMouseState(state,true);edgeProbe.observe(display.getWidth(),display.getHeight(),display.cursorX,display.cursorY,display.getScale());};
- desktopMouse=new Guacamole.Mouse.Touchpad(display.getElement());desktopMouse.onmousedown=desktopMouse.onmouseup=desktopMouse.onmousemove=sendMouse;
- const mouse=desktopBrowserMouse=new Guacamole.Mouse(display.getElement());mouse.onmousedown=mouse.onmouseup=mouse.onmousemove=sendMouse;
+ const sendMouse=(state,hardware=false)=>{if(hardware&&!desktopInputRemote)return;client.sendMouseState(state,true);edgeProbe.observe(display.getWidth(),display.getHeight(),display.cursorX,display.cursorY,display.getScale());};
+ desktopMouse=new Guacamole.Mouse.Touchpad(display.getElement());desktopMouse.onmousedown=desktopMouse.onmouseup=desktopMouse.onmousemove=state=>sendMouse(state);
+ const mouse=desktopBrowserMouse=new Guacamole.Mouse(display.getElement());mouse.onmousedown=mouse.onmouseup=mouse.onmousemove=state=>sendMouse(state,true);
+ await local('desktopInputShortcut',desktopId).catch(()=>{});if(generation!==desktopGeneration)return;
  client.connect();setNativeDesktopInput(true);zoomed=false;syncDesktopLayout();
  }catch(e){toast(e.message);stopDesktop();}finally{desktopConnecting=false;$('desktop-connect').disabled=false;$('desktop-connect').textContent='连接桌面';}};
 $('desk-disconnect').onclick=stopDesktop;$('desk-fit').onclick=()=>{zoomed=false;fitDesktop();scheduleDesktopResize();};$('desk-zoom').onclick=()=>{zoomed=!zoomed;fitDesktop();};
@@ -166,21 +200,25 @@ const releaseKeys=element('button','释放按键');releaseKeys.id='desk-release-
 const clipboardSend=element('button','发送手机剪贴板');clipboardSend.id='desk-clipboard-send';
 clipboardSend.onclick=async()=>{
  if(!desktopClient)return;const client=desktopClient,generation=desktopGeneration;clipboardSend.disabled=true;
- try{await local('desktopInput',desktopId);if(generation!==desktopGeneration)return;const result=await local('desktopClipboardRead');if(generation!==desktopGeneration)return;const text=result.text;if(typeof text!=='string'||new TextEncoder().encode(text).length>DESKTOP_CLIPBOARD_LIMIT)throw new Error('剪贴板文字最多 16 KiB');const writer=new Guacamole.StringWriter(client.createClipboardStream('text/plain'));writer.onack=status=>{if(status.isError()&&generation===desktopGeneration)toast('远程桌面拒绝剪贴板');};writer.sendText(text);writer.sendEnd();toast('文字已发送到远程剪贴板');}catch(e){toast(e.message);}finally{clipboardSend.disabled=false;setNativeDesktopInput(true);}
+ try{if(generation!==desktopGeneration)return;const result=await local('desktopClipboardRead');if(generation!==desktopGeneration)return;const text=result.text;if(typeof text!=='string'||new TextEncoder().encode(text).length>DESKTOP_CLIPBOARD_LIMIT)throw new Error('剪贴板文字最多 16 KiB');const writer=new Guacamole.StringWriter(client.createClipboardStream('text/plain'));writer.onack=status=>{if(status.isError()&&generation===desktopGeneration)toast('远程桌面拒绝剪贴板');};writer.sendText(text);writer.sendEnd();toast('文字已发送到远程剪贴板');}catch(e){toast(e.message);}finally{clipboardSend.disabled=false;setNativeDesktopInput(true);}
 };
 const clipboardReceive=element('button','复制远程剪贴板');clipboardReceive.id='desk-clipboard-receive';clipboardReceive.disabled=true;
-clipboardReceive.onclick=async()=>{if(!desktopClient||!desktopClipboardAvailable)return;const generation=desktopGeneration,text=desktopRemoteClipboard;try{await local('desktopInput',desktopId);if(generation!==desktopGeneration)return;await local('desktopClipboardWrite',text);toast('远程文字已复制到手机');}catch(e){toast(e.message);}finally{setNativeDesktopInput(true);}};
+clipboardReceive.onclick=async()=>{if(!desktopClient||!desktopClipboardAvailable)return;const generation=desktopGeneration,text=desktopRemoteClipboard;try{if(generation!==desktopGeneration)return;await local('desktopClipboardWrite',text);toast('远程文字已复制到手机');}catch(e){toast(e.message);}finally{setNativeDesktopInput(true);}};
 document.querySelector('.keys').append(clipboardSend,clipboardReceive);
 
 async function desktopSample(client){
  const display=client.getDisplay(),canvas=display.flatten(),ctx=canvas.getContext('2d'),box=$('screen').getBoundingClientRect();
- const sample={remote:[display.getWidth(),display.getHeight()],viewport:[innerWidth,innerHeight],frame:[box.x,box.y,box.width,box.height],scale:display.getScale(),cursor:[display.cursorX,display.cursorY],columns:sampleDesktopColumns(canvas.width,canvas.height,(x,y)=>ctx.getImageData(x,y,1,1).data)};
+ const root=display.getElement().firstElementChild,layer=display.getDefaultLayer(),backing=layer.getCanvas(),b=root.getBoundingClientRect(),style=getComputedStyle(root);
+ const sample={remote:[display.getWidth(),display.getHeight()],viewport:[innerWidth,innerHeight],frame:[box.x,box.y,box.width,box.height],scale:display.getScale(),cursor:[display.cursorX,display.cursorY],presentation:{mode:desktopScaling?.mode||'transform',frame:[b.x,b.y,b.width,b.height],backing:[backing.width,backing.height],transform:style.transform,zoom:style.zoom},columns:sampleDesktopColumns(canvas.width,canvas.height,(x,y)=>ctx.getImageData(x,y,1,1).data)};
  try{sample.window=await local('desktopProbe',{cssWidth:innerWidth,cssHeight:innerHeight,x:box.x,y:box.y,width:box.width,height:box.height});}
  catch(e){sample.window={available:false,reason:'native-bridge'};}
  return sample;
 }
 function showDesktopReport(report){
  const body=sheet('桌面显示诊断');body.append(element('p','鼠标进入边缘或角落时会自动记录显示统计，不打开控件、不主动重绘，也不保存截图、按键或桌面文字。手动检查仍可能让黑块恢复；复制诊断会同时包含最近四次边缘记录。'));
+ const presentation=element('button',desktopScaling?.mode==='layout'?'切回旧版缩放':'使用布局缩放','primary');presentation.id='desk-presentation-mode';
+ presentation.onclick=()=>{if(!desktopClient||!desktopScaling)return;desktopPresentation=desktopScaling.setMode(desktopScaling.mode==='layout'?'transform':'layout');localStorage.setItem('desktop-presentation',desktopPresentation);desktopTrace?.event('presentation',{mode:desktopPresentation});$('sheet').close();fitDesktop();toast(desktopPresentation==='layout'?'已使用布局缩放，请观察右侧画面':'已恢复旧版缩放');};
+ body.append(presentation,element('p','布局缩放用于排查旋转或分辨率变化后的黑块。可随时切回旧版，无需重连。','footnote'));
  const mode=element('button',report.mode==='software'?'切换到默认绘制':'切换到软件绘制','primary');
  mode.onclick=async()=>{if(!desktopClient){toast('请先连接桌面');return;}const generation=desktopGeneration,next=desktopRenderMode==='software'?'default':'software';mode.disabled=true;try{await local('desktopRendering',next);if(generation!==desktopGeneration)return;desktopRenderMode=next;localStorage.setItem('desktop-render-mode',next);desktopTrace?.event('render-mode',{mode:next});$('sheet').close();toast(next==='default'?'已切换默认绘制，请观察是否仍会出现黑块':'已切换软件绘制，请观察是否仍会出现黑块');}catch(e){toast(e.message);}finally{mode.disabled=false;}};
  body.append(mode,element('p','切换只影响手机显示，不会重连桌面。默认绘制和软件绘制可在同一次连接中对比。','footnote'));
@@ -202,7 +240,7 @@ $('desk-inspect').onclick=async()=>{
   if(generation!==desktopGeneration)return;
   const after=await desktopSample(client);
   if(generation!==desktopGeneration)return;
-  const report={version:'0.6.0-beta.3',build:24,mode:desktopRenderMode,cursorPositioning:'layout',sampling:{controlsHidden:true,mayTriggerRepaint:true,automaticEdgeCapture:true},edges:desktopEdgeProbe?.snapshot()||[],before,after,trace:desktopTrace.snapshot()};
+  const report={version:'0.6.0-beta.4',build:25,mode:desktopRenderMode,cursorPositioning:'layout',sampling:{controlsHidden:true,mayTriggerRepaint:true,automaticEdgeCapture:true},edges:desktopEdgeProbe?.snapshot()||[],before,after,trace:desktopTrace.snapshot()};
   try{localStorage.setItem('desktop-last-report',JSON.stringify(report));}catch(e){}
   showDesktopReport(report);
  }catch(e){toast('画面仍在调整，请稍后再检查');}finally{document.body.classList.remove('desktop-sampling');button.disabled=false;}

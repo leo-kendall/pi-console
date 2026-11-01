@@ -77,6 +77,7 @@ public final class MainActivity extends Activity {
  }
  @Override public void onConfigurationChanged(Configuration configuration){super.onConfigurationChanged(configuration);notifyOrientation();if(web!=null)web.getSettings().setTextZoom(Math.round(100*configuration.fontScale));setDesktopFullscreen(desktopFullscreen);}
  @Override public void onWindowFocusChanged(boolean focused){super.onWindowFocusChanged(focused);if(desktopInput!=null)desktopInput.focusChanged(focused);if(focused&&desktopFullscreen)setDesktopFullscreen(true);}
+ @Override public boolean dispatchKeyEvent(android.view.KeyEvent event){return desktopInput!=null&&desktopInput.key(event)||super.dispatchKeyEvent(event);}
  private WebResourceResponse blocked(){return new WebResourceResponse("text/plain","UTF-8",403,"Forbidden",Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));}
  private void result(String id,JSONObject value,String error){runOnUiThread(()->{if(!isDestroyed())web.evaluateJavascript("window.nativeResult("+JSONObject.quote(id)+","+(value==null?"null":value.toString())+","+(error==null?"null":JSONObject.quote(error))+")",null);});}
  final class Bridge {
@@ -120,7 +121,7 @@ public final class MainActivity extends Activity {
     else if(action.equals("switchProfile")||action.equals("removeProfile")){
      if(files.busy()||backup.busy())throw new Exception("请等待文件选择、传输或备份任务结束");
      if(action.equals("removeProfile"))TransferService.discardProfile(MainActivity.this,value);
-     AlertMonitorService.stop(MainActivity.this);desktopInput.setSession("");
+     AlertMonitorService.stop(MainActivity.this);desktopInput.setShortcutSession("");desktopInput.setSession("");
      if(action.equals("switchProfile"))ServerSettings.activate(MainActivity.this,value);else ServerSettings.remove(MainActivity.this,value);
      out=ProfileBridge.list(MainActivity.this);
     }
@@ -150,6 +151,7 @@ public final class MainActivity extends Activity {
      web.invalidate();out.put("ok",true);
     }
     else if(action.equals("desktopInput")){if(value.length()>128)throw new Exception("桌面会话无效");desktopInput.setSession(value);out.put("ok",true);}
+    else if(action.equals("desktopInputShortcut")){desktopInput.setShortcutSession(value);out.put("ok",true);}
     else if(action.equals("desktopInputRegion")){desktopInput.setRegion(new JSONObject(value));out.put("ok",true);}
     else if(action.equals("desktopClipboardRead"))out=desktopInput.readClipboard();
     else if(action.equals("desktopClipboardWrite"))out=desktopInput.writeClipboard(value);
@@ -182,7 +184,7 @@ public final class MainActivity extends Activity {
    }catch(Exception e){result(id,null,e.getMessage());}});
   }
  }
- @Override protected void onPause(){if(desktopInput!=null)desktopInput.setSession("");setDesktopFullscreen(false);if(web!=null)web.evaluateJavascript("window.pauseApp&&pauseApp()",null);super.onPause();}
+ @Override protected void onPause(){if(desktopInput!=null){desktopInput.setShortcutSession("");desktopInput.setSession("");}setDesktopFullscreen(false);if(web!=null)web.evaluateJavascript("window.pauseApp&&pauseApp()",null);super.onPause();}
  @Override protected void onResume(){super.onResume();if(web!=null)web.evaluateJavascript("window.resumeApp&&resumeApp()",null);}
  void backupEvent(String type,JSONObject event){runOnUiThread(()->{if(!isDestroyed())web.evaluateJavascript("window.backupEvent&&backupEvent("+JSONObject.quote(type)+","+event.toString()+")",null);});}
  void fileProgress(JSONObject progress){runOnUiThread(()->{if(!isDestroyed())web.evaluateJavascript("window.fileTransferProgress&&fileTransferProgress("+progress.toString()+")",null);});}

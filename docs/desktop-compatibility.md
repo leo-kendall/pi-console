@@ -10,7 +10,7 @@
 | 要求 VeNCrypt、TLS、RA2 等安全模式的 VNC/WayVNC | 当前不支持，连接前会明确拒绝；不会自动关闭认证或把服务改成弱认证。混合提供多种认证模式也拒绝，避免 guacd 自行选择其他模式。 |
 | 无图形桌面 / Lite 镜像 | 需先自行部署桌面及兼容服务。其他监控功能不依赖桌面。 |
 
-已验证范围是协议模拟、隔离的真实 guacd 与合成 RDP/VNC 服务、浏览器和 Android 编译；没有把这些测试当成 Raspberry Pi OS、xrdp 或其他发行版的实体硬件兼容认证。WayVNC 名称本身不能保证认证模式兼容。黑块显示问题的调查仍保持暂停，此功能没有改动渲染方案。
+已验证范围是协议模拟、隔离的真实 guacd 与合成 RDP/VNC 服务、浏览器和 Android 编译；没有把这些测试当成 Raspberry Pi OS、xrdp 或其他发行版的实体硬件兼容认证。WayVNC 名称本身不能保证认证模式兼容。0.6.0-beta.4 默认使用布局缩放，避开整幅画布的 CSS transform 缩放，并保留旧版缩放供对比。针对手机窗口右侧黑块的方案仍需实体手机确认，浏览器截图通过不代表 Android GPU 问题已经消除。
 
 ## 配置已有服务
 
@@ -52,6 +52,8 @@ python3 remote-desktop/configure.py probe
 
 ## 键盘、鼠标与剪贴板
 
+连接桌面后，App 在前台时按 **Ctrl+Alt+空格** 可把实体键盘和鼠标的控制目标切换到手机，再按一次切回远程桌面。桌面上的“键鼠：远程／手机”按钮显示当前目标，也可点击切换；长按快捷键只切换一次。切换会释放远端按键和鼠标按钮，手机目标下实体输入保留为本机操作。触控手势和明确点击的远程按键、文字发送、剪贴板按钮仍可使用。离开 App 后此快捷键不生效，不申请全局输入权限。
+
 活动桌面支持物理键盘的按下/松开、左右 Ctrl/Alt/Shift/Super、方向键、F1–F12 和 Unicode 字符，按键组合通过 Guacamole 公共键盘接口传递。Android 返回键保留为本机操作，系统本身截留的快捷键无法承诺送达。软键盘仍通过现有文字输入框发送。
 
 桌面控件提供 Ctrl/Alt/Shift/Super 锁定键，可与硬件按键及其他锁定键组合；再次点击取消，或点“释放按键”。失焦、隐藏、断开或切换服务器会释放远程按键和鼠标按钮。编辑本机输入框/设置时停止原生键盘捕获，鼠标只在桌面区域捕获；保留触控板、拖动、左右/中键和滚轮。水平硬件滚轮使用 Shift+滚轮，应用是否支持横向滚动取决于远程程序。
@@ -69,7 +71,7 @@ python3 -m unittest discover -s tests -p 'test_desktop*.py'
 python3 -m unittest discover -s remote-desktop -p 'test_*.py'
 PI_ANDROID_JAR=/path/to/android.jar python3 tests/run_desktop_java.py
 PI_DESKTOP_GUACD_IMAGE=guacamole/guacd@sha256:8974eaa9ba32f713daf311e7cc8cd7e4cdfba1edea39eed75524e78ef4b08f4f python3 -m unittest discover -s tests -p test_desktop_guacd_integration.py -v
-flock /tmp/pi-console-browser.lock python3 scripts/test_browser.py test_desktop_input_ui.mjs test_desktop_edge_ui.mjs
+flock /tmp/pi-console-browser.lock python3 scripts/test_browser.py test_desktop_input_ui.mjs test_desktop_edge_ui.mjs test_desktop_presentation_ui.mjs
 ```
 
-部分发行版打包的 Firefox 无法访问宿主 `/tmp` profile，可把 `TMPDIR` 指向工作目录中的私有测试目录。Android 构建方式见[构建说明](build.md)。显示诊断保持现有统计方式，统计不能代表已验证实体手机的黑块问题。
+部分发行版打包的 Firefox 无法访问宿主 `/tmp` profile，可把 `TMPDIR` 指向工作目录中的私有测试目录。Android 构建方式见[构建说明](build.md)。截图测试验证 1280→2250 分辨率变化前后各列颜色、光标热点、缩放边界和模式切换。显示诊断增加缩放方式、画布实际边界和 backing 尺寸；不保存桌面内容，统计不能代表已验证实体手机的黑块问题。

@@ -53,3 +53,6 @@ body.desktop-fullscreen{background:#08090b}
 .admin-card h3,.admin-card code,.admin-card p{overflow-wrap:anywhere;word-break:break-word}.admin-card select{max-width:100%}.admin-card button{min-height:48px}
 
 #server-profiles .profile-row{padding:12px 0;border-bottom:1px solid var(--line)}[data-modifier][aria-pressed=true]{background:var(--accent);color:white}
+
+#desk-input-target{background:var(--soft);color:var(--accent);border-radius:10px;padding:4px 12px;font-size:12px;min-height:40px}#desk-input-target[aria-pressed=false]{background:var(--card);color:var(--text);box-shadow:0 0 0 1px var(--line)}body.desktop-fullscreen #desk-input-target{position:absolute;z-index:5;top:8px;right:76px;max-width:calc(100% - 92px)}body.desktop-sampling #desk-input-target{visibility:hidden}
+body.desktop-fullscreen.desktop-controls-open #desk-input-target{top:72px}

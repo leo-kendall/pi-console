@@ -23,8 +23,16 @@ try{
  navigate('desktop');$('desktop-connect').click();void 0`);
  await waitFor('desktopClient?.getDisplay().getWidth()===1280');
  assert.equal(await evaluate("$('desktop-status').textContent.includes('VNC')"),true,'Configured protocol shown from backend response');
+ await call('browsingContext.setViewport',{context,viewport:{width:818,height:392},devicePixelRatio:1});
+ await evaluate('setDeviceLandscape(true);void 0');await waitFor("document.body.classList.contains('desktop-fullscreen')");await delay(100);
+ await evaluate("$('desk-controls').click();void 0");await delay(40);
+ assert.equal(await evaluate("(()=>{const e=$('desk-disconnect'),b=e.getBoundingClientRect();return document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)?.closest('button')===e;})()"),true,'Expanded toolbar Disconnect is not obscured by target badge');
+ await evaluate("$('desk-controls').click();updateNativeDesktopRegion();void 0");
+ assert.equal(await evaluate("(()=>{const r=inputRegions.at(-1);return ['desk-input-target','desk-controls'].every(id=>{const b=$(id).getBoundingClientRect(),x=(b.x+b.width/2)/innerWidth,y=(b.y+b.height/2)/innerHeight;return r.exclude?.some(e=>x>=e.left&&x<e.right&&y>=e.top&&y<e.bottom);});})()"),true,'Native region excludes target badge and collapsed Controls from remote mouse capture');
+ await call('browsingContext.setViewport',{context,viewport:{width:1024,height:768},devicePixelRatio:1});
+ await evaluate('setDeviceLandscape(false);void 0');await delay(60);
  await evaluate("(()=>{const screen=$('screen'),saved=screen.getBoundingClientRect;screen.getBoundingClientRect=()=>({left:-100,top:-100,right:-20,bottom:-20});updateNativeDesktopRegion();screen.getBoundingClientRect=saved;})();void 0");
- assert.equal(await evaluate('Object.values(inputRegions[inputRegions.length-1]).every(v=>v>=0&&v<=1)'),true,'Fully offscreen display disables native mouse region safely');
+ assert.equal(await evaluate("['left','top','right','bottom'].every(k=>inputRegions.at(-1)[k]>=0&&inputRegions.at(-1)[k]<=1)"),true,'Fully offscreen display disables native mouse region safely');
  await evaluate('updateNativeDesktopRegion();void 0');
  assert.equal(await evaluate('clipReads'),0,'No clipboard polling at connect');
  assert.equal(await evaluate("Boolean(document.querySelector('[data-modifier=ctrl]'))"),true,'Sticky modifiers exist');
@@ -36,6 +44,29 @@ try{
  await evaluate("desktopNativeInput({session:desktopId,type:'reset'});void 0");await delay(80);
  assert.equal(await evaluate("document.querySelector('[data-modifier=ctrl]').getAttribute('aria-pressed')"),'false','Focus loss clears sticky control');
  assert.equal(await evaluate("sent.join('').includes('3.key,5.65507,1.0;')"),true,'Focus loss releases control');
+ // A target switch releases both native and browser state, then leaves phone input local.
+ await evaluate("sent=[];desktopNativeInput({session:desktopId,type:'key',keysym:97,down:true});desktopKeyboard.press(98);desktopMouse.press('left');$('desk-input-target')?.click();void 0");await delay(100);
+ assert.equal(await evaluate("$('desk-input-target')?.getAttribute('aria-pressed')"),'false','Target button switches hardware input to phone');
+ assert.equal(await evaluate("sent.join('').includes('3.key,2.97,1.0;')&&sent.join('').includes('3.key,2.98,1.0;')"),true,'Target switch releases held native and browser keys');
+ assert.equal(await evaluate('desktopMouse.currentState.left'),false,'Target switch releases held mouse button');
+ assert.equal(await evaluate("inputSessions.at(-1)"),'','Phone target disables native forwarding');
+ await evaluate("sent=[];desktopNativeInput({session:desktopId,type:'key',keysym:99,down:true});desktopClient.getDisplay().getElement().dispatchEvent(new KeyboardEvent('keydown',{key:'c',code:'KeyC',keyCode:67,bubbles:true,cancelable:true}));desktopBrowserMouse.onmousemove(new Guacamole.Mouse.State(30,40,true,false,false,false,false));void 0");await delay(750);
+ assert.equal(await evaluate("/3.key|5.mouse/.test(sent.join(''))"),false,'Phone target blocks native and browser keyboard/mouse input and repeat');
+ await evaluate("window.phoneKey=new KeyboardEvent('keydown',{key:'a',code:'KeyA',keyCode:65,bubbles:true,cancelable:true});window.phoneWheel=new WheelEvent('wheel',{deltaY:100,bubbles:true,cancelable:true});desktopClient.getDisplay().getElement().dispatchEvent(phoneKey);desktopClient.getDisplay().getElement().dispatchEvent(phoneWheel);$('desk-clipboard-send').click();void 0");await waitFor('clipReads===1');
+ assert.equal(await evaluate('phoneKey.defaultPrevented||phoneWheel.defaultPrevented'),false,'Phone target preserves normal browser keyboard and wheel defaults');
+ assert.equal(await evaluate("inputSessions.at(-1)"),'','Explicit clipboard action does not enable remote hardware capture');
+ await evaluate('clipReads=0;void 0');
+ await evaluate("desktopNativeInput({session:'old-session',type:'toggle-target'});void 0");
+ assert.equal(await evaluate("$('desk-input-target').getAttribute('aria-pressed')"),'false','Stale session cannot change target');
+ await evaluate("desktopNativeInput({session:desktopId,type:'toggle-target'});void 0");await waitFor("inputSessions.at(-1)===desktopId");
+ assert.equal(await evaluate("$('desk-input-target').getAttribute('aria-pressed')"),'true','Native shortcut restores remote target');
+ await evaluate("desktopNativeInput({session:desktopId,type:'key',keysym:100,down:true});desktopNativeInput({session:desktopId,type:'key',keysym:100,down:false});void 0");await delay(80);
+ assert.equal(await evaluate("sent.join('').includes('3.key,3.100,1.1;')"),true,'Remote hardware input resumes');
+ // Browser fallback consumes the chord and repeated Space, including modifier-first release.
+ await evaluate("(()=>{const target=desktopClient.getDisplay().getElement();target.focus();window.targetSpace=new KeyboardEvent('keydown',{key:' ',code:'Space',keyCode:32,ctrlKey:true,altKey:true,bubbles:true,cancelable:true});target.dispatchEvent(targetSpace);target.dispatchEvent(new KeyboardEvent('keydown',{key:' ',code:'Space',keyCode:32,ctrlKey:true,altKey:true,repeat:true,bubbles:true,cancelable:true}));target.dispatchEvent(new KeyboardEvent('keyup',{key:' ',code:'Space',keyCode:32,bubbles:true,cancelable:true}));})();void 0");
+ assert.equal(await evaluate('targetSpace.defaultPrevented'),true,'Toggle Space is consumed');
+ assert.equal(await evaluate("$('desk-input-target').getAttribute('aria-pressed')"),'false','Holding Space toggles only once');
+ await evaluate("$('desk-input-target').click();void 0");await waitFor("inputSessions.at(-1)===desktopId");
  await evaluate("$('desk-clipboard-send').click();void 0");await waitFor('clipReads===1');await delay(100);
  assert.equal(await evaluate("sent.join('').includes('9.clipboard')"),true,'Real Guacamole clipboard stream used');
  await evaluate("remoteFrames='9.clipboard,2.42,10.text/plain;4.blob,2.42,8.cmVtb3Rl;3.end,2.42;';void 0");await waitFor("!$('desk-clipboard-receive').disabled");

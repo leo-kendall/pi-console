@@ -15,10 +15,10 @@ final class DesktopInput {
  private static final int MAX_CLIPBOARD=16384;
  private final Activity activity;private final WebView web;
  private final DesktopKeys.Pressed pressed=new DesktopKeys.Pressed();
- private String session="";private boolean focused=true;private final DesktopPointer pointer=new DesktopPointer();
+ private String session="",shortcutSession="";private boolean focused=true;private final DesktopPointer pointer=new DesktopPointer();
+ private final DesktopShortcut shortcut=new DesktopShortcut();
  DesktopInput(Activity activity,WebView web){
   this.activity=activity;this.web=web;
-  web.setOnKeyListener((view,code,event)->key(event));
   web.setOnGenericMotionListener((view,event)->mouse(event));
   web.setOnTouchListener((view,event)->mouse(event));
  }
@@ -26,13 +26,23 @@ final class DesktopInput {
   if(value==null||value.length()>128)throw new IllegalArgumentException("Invalid desktop session");
   if(!session.equals(value)){release();session=value;}
  }
- void setRegion(JSONObject bounds)throws Exception{
-  pointer.set(bounds.getDouble("left"),bounds.getDouble("top"),bounds.getDouble("right"),bounds.getDouble("bottom"));
+ void setShortcutSession(String value){
+  if(value==null||value.length()>128)throw new IllegalArgumentException("Invalid desktop session");
+  if(!shortcutSession.equals(value)){release();session="";shortcut.reset();shortcutSession=value;}
  }
- void focusChanged(boolean value){if(!value)release();focused=value;}
+ void setRegion(JSONObject bounds)throws Exception{
+  org.json.JSONArray list=bounds.optJSONArray("exclude");int count=list==null?0:list.length();
+  if(count>8)throw new IllegalArgumentException("Too many desktop exclusions");double[][] holes=new double[count][4];
+  for(int i=0;i<count;i++){JSONObject e=list.getJSONObject(i);holes[i]=new double[]{e.getDouble("left"),e.getDouble("top"),e.getDouble("right"),e.getDouble("bottom")};}
+  pointer.set(bounds.getDouble("left"),bounds.getDouble("top"),bounds.getDouble("right"),bounds.getDouble("bottom"),holes);
+ }
+ void focusChanged(boolean value){if(!value){release();shortcut.reset();}focused=value;}
  private void emit(JSONObject event){
-  if(session.isEmpty())return;
-  try{event.put("session",session);web.evaluateJavascript("window.desktopNativeInput&&window.desktopNativeInput("+event.toString()+")",null);}catch(Exception ignored){}
+  emitTo(session,event);
+ }
+ private void emitTo(String token,JSONObject event){
+  if(token.isEmpty())return;
+  try{event.put("session",token);web.evaluateJavascript("window.desktopNativeInput&&window.desktopNativeInput("+event.toString()+")",null);}catch(Exception ignored){}
  }
  private void keyEvent(int sym,boolean down){try{emit(new JSONObject().put("type","key").put("keysym",sym).put("down",down));}catch(Exception ignored){}}
  private void release(){
@@ -40,9 +50,17 @@ final class DesktopInput {
   for(int sym:pressed.release())keyEvent(sym,false);
   try{emit(new JSONObject().put("type","reset"));}catch(Exception ignored){}
  }
- private boolean key(KeyEvent event){
-  if(session.isEmpty()||!focused||event.getDeviceId()==android.view.KeyCharacterMap.VIRTUAL_KEYBOARD||event.getKeyCode()==KeyEvent.KEYCODE_BACK)return false;
+ boolean key(KeyEvent event){
+  if(!focused||event.getDeviceId()==android.view.KeyCharacterMap.VIRTUAL_KEYBOARD||event.getKeyCode()==KeyEvent.KEYCODE_BACK)return false;
   if(event.getAction()!=KeyEvent.ACTION_DOWN&&event.getAction()!=KeyEvent.ACTION_UP)return false;
+  if(!shortcutSession.isEmpty()){
+   int action=shortcut.key(event.getKeyCode(),event.getAction()==KeyEvent.ACTION_DOWN,event.isCtrlPressed(),event.isAltPressed(),event.getRepeatCount());
+   if(action!=0){
+    if(action==2){release();session="";try{emitTo(shortcutSession,new JSONObject().put("type","toggle-target"));}catch(Exception ignored){}}
+    return true;
+   }
+  }
+  if(session.isEmpty())return false;
   // Ctrl/Alt/Meta affect the remote modifier state, not the translated character.
   int meta=event.getMetaState()&~(KeyEvent.META_CTRL_MASK|KeyEvent.META_ALT_MASK|KeyEvent.META_META_MASK);
   int sym=DesktopKeys.keysym(event.getKeyCode(),event.getUnicodeChar(meta));
@@ -66,7 +84,7 @@ final class DesktopInput {
   if(text==null||text.length()>MAX_CLIPBOARD||text.getBytes(StandardCharsets.UTF_8).length>MAX_CLIPBOARD)throw new IllegalArgumentException("剪贴板文字最多 16 KiB");
   return text;
  }
- private void requireSession(){if(session.isEmpty()||!focused)throw new IllegalStateException("请先连接远程桌面");}
+ private void requireSession(){if(session.isEmpty()&&shortcutSession.isEmpty()||!focused)throw new IllegalStateException("请先连接远程桌面");}
  JSONObject readClipboard()throws Exception{
   requireSession();
   ClipboardManager clipboard=(ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE);String text="";

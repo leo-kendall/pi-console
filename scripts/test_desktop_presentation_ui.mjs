@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Real Guacamole layout/pixel checks; Firefox screenshots do not reproduce Android GPU defects.
 import assert from 'node:assert/strict';
+import {mkdirSync,writeFileSync} from 'node:fs';
+import {join} from 'node:path';
 const socket=new WebSocket('ws://127.0.0.1:19226/session');
 await new Promise((resolve,reject)=>{socket.onopen=resolve;socket.onerror=reject;});
 let serial=0;const waiting=new Map();
@@ -11,7 +13,9 @@ const context=(await call('browsingContext.getTree')).contexts[0].context;
 async function evaluate(expression){const r=await call('script.evaluate',{expression,target:{context},awaitPromise:true});if(r.type==='exception')throw Error(JSON.stringify(r.exceptionDetails));return r.result.value;}
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 async function waitFor(expr){for(let i=0;i<60;i++){if(await evaluate(expr))return;await delay(100);}throw Error('Timeout: '+expr);}
+async function saveScreenshot(name){if(!process.env.PI_TEST_SCREENSHOT_DIR)return;mkdirSync(process.env.PI_TEST_SCREENSHOT_DIR,{recursive:true});const shot=await call('browsingContext.captureScreenshot',{context,origin:'viewport'});writeFileSync(join(process.env.PI_TEST_SCREENSHOT_DIR,name+'.png'),Buffer.from(shot.data,'base64'));}
 async function checkPixels(){
+ await waitFor("!$('desktop').getAnimations().some(a=>a.playState==='running')");
  await evaluate("new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))");
  const coordinates=JSON.parse(await evaluate("JSON.stringify({w:innerWidth,h:innerHeight,box:(()=>{const b=$('screen').getBoundingClientRect();return [b.x,b.y,b.width,b.height];})()})"));
  const shot=await call('browsingContext.captureScreenshot',{context,origin:'viewport'});
@@ -39,6 +43,7 @@ try{
  await call('browsingContext.setViewport',{context,viewport:{width:818,height:392},devicePixelRatio:2.75});
  await evaluate("setDeviceLandscape(true);incoming=coloredFrame(2250,1080);void 0");await waitFor('desktopClient.getDisplay().getWidth()===2250');await delay(250);
  await checkBounds();await checkPixels();
+ await evaluate("$('toast').hidden=true;$('desk-controls').click();void 0");await saveScreenshot('desktop-landscape-controls');await evaluate("$('desk-controls').click();void 0");
  // Keep a real cursor layer/hotspot and test its displayed position under layout zoom.
  await evaluate("(()=>{const d=desktopClient.getDisplay(),layer=d.getCursorLayer();layer.resize(16,16);d.cursorHotspotX=3;d.cursorHotspotY=4;d.showCursor(true);d.moveCursor(2000,900);})();void 0");
  assert.equal(await evaluate("(()=>{const d=desktopClient.getDisplay(),b=d.getElement().getBoundingClientRect(),c=d.getCursorLayer().getElement().getBoundingClientRect();return Math.abs(c.left-b.left-(2000-3)*d.getScale())<1&&Math.abs(c.top-b.top-(900-4)*d.getScale())<1;})()"),true,'Cursor retains remote coordinates and hotspot after resize');
@@ -52,5 +57,15 @@ try{
  await evaluate("$('desk-zoom').click();void 0");await delay(150);await checkBounds();
  assert.equal(await evaluate('desktopClient.getDisplay().getScale()'),1,'1:1 zoom preserves input coordinate scale');
  await evaluate("$('desk-fit').click();void 0");await delay(100);await checkBounds();await checkPixels();
+ // The reported2250x1080 desktop is shorter than the old200px minimum in portrait.
+ await call('browsingContext.setViewport',{context,viewport:{width:392,height:802},devicePixelRatio:2.75});
+ await evaluate('setDeviceLandscape(false);void 0');await delay(100);
+ assert.equal(await evaluate("(()=>{const v=$('screen-scroll').getBoundingClientRect(),s=$('screen').getBoundingClientRect();return Math.abs(v.height-s.height)<1&&Math.abs(v.x+v.width/2-s.x-s.width/2)<1&&Math.abs(v.y+v.height/2-s.y-s.height/2)<1;})()"),true,'Portrait preview hugs the wide desktop and centers it without excess bottom space');
+ await checkBounds();await checkPixels();
+ await saveScreenshot('desktop-portrait-centered');
+ // A tall remote display must also be centered horizontally, within60vh.
+ await evaluate('incoming=coloredFrame(800,1200);void 0');await waitFor('desktopClient.getDisplay().getWidth()===800');await delay(100);
+ assert.equal(await evaluate("(()=>{const v=$('screen-scroll').getBoundingClientRect(),s=$('screen').getBoundingClientRect();return Math.abs(v.x+v.width/2-s.x-s.width/2)<1&&Math.abs(v.y+v.height/2-s.y-s.height/2)<1&&s.height<=innerHeight*.6+1&&s.width<=v.width+1;})()"),true,'Tall desktop fits and centers inside available portrait space');
+ await checkBounds();await checkPixels();
  console.log('Desktop presentation: colored screenshot columns, portrait→landscape 1280→2250 resize, cursor hotspot, no double scale, reversible modes and 1:1 zoom passed (Firefox, not Android hardware).');
 }finally{await evaluate('stopDesktop();pauseApp();void 0').catch(()=>{});await call('session.end');socket.close();}

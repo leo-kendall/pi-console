@@ -26,9 +26,30 @@ try{
  await call('browsingContext.setViewport',{context,viewport:{width:818,height:392},devicePixelRatio:1});
  await evaluate('setDeviceLandscape(true);void 0');await waitFor("document.body.classList.contains('desktop-fullscreen')");await delay(100);
  await evaluate("$('desk-controls').click();void 0");await delay(40);
+ for(let i=0;i<2;i++){
+  assert.equal(await evaluate("(()=>{const target=getComputedStyle($('desk-input-target')),other=getComputedStyle($('desk-fit'));return target.backgroundColor===other.backgroundColor&&target.color===other.color;})()"),true,'Both keyboard target states use the same colors as adjacent controls');
+  await evaluate("$('desk-input-target').click();void 0");
+ }
+ for(const [width,font] of [[818,12],[700,18],[818,24]]){
+  await call('browsingContext.setViewport',{context,viewport:{width,height:392},devicePixelRatio:1});
+  await evaluate(`document.querySelectorAll('.desktop-toolbar button').forEach(e=>e.style.fontSize='${font}px');void 0`);await delay(50);
+  assert.equal(await evaluate("[...document.querySelectorAll('.desktop-toolbar button')].every(e=>{const b=e.getBoundingClientRect(),r=document.createRange();r.selectNodeContents(e);const t=r.getBoundingClientRect();return t.left>=b.left-1&&t.right<=b.right+1&&t.top>=b.top-1&&t.bottom<=b.bottom+1;})"),true,'Toolbar labels remain inside their own button at '+width+'px / '+font+'px font');
+ }
+ await call('browsingContext.setViewport',{context,viewport:{width:320,height:640},devicePixelRatio:1});
+ await evaluate("document.querySelector('.desktop-primary').scrollLeft=0;desktopClient.getDisplay().getElement().focus();desktopNativeInput({session:desktopId,type:'toggle-target'});void 0");
+ assert.equal(await evaluate("(()=>{const r=document.activeElement.getBoundingClientRect();return r.width>0&&r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight;})()"),true,'Phone target focus stays visible when controls overflow a narrow fullscreen viewport');
+ await evaluate("desktopNativeInput({session:desktopId,type:'toggle-target'});void 0");
+ await call('browsingContext.setViewport',{context,viewport:{width:818,height:392},devicePixelRatio:1});
+ await evaluate("document.querySelectorAll('.desktop-toolbar button').forEach(e=>e.style.fontSize='');$('desk-disconnect').scrollIntoView({block:'nearest',inline:'nearest'});void 0");await delay(50);
  assert.equal(await evaluate("(()=>{const e=$('desk-disconnect'),b=e.getBoundingClientRect();return document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)?.closest('button')===e;})()"),true,'Expanded toolbar Disconnect is not obscured by target badge');
+ assert.equal(await evaluate("$('desk-input-target').closest('.desktop-primary')!==null"),true,'Target toggle belongs inside the controls toolbar');
  await evaluate("$('desk-controls').click();updateNativeDesktopRegion();void 0");
- assert.equal(await evaluate("(()=>{const r=inputRegions.at(-1);return ['desk-input-target','desk-controls'].every(id=>{const b=$(id).getBoundingClientRect(),x=(b.x+b.width/2)/innerWidth,y=(b.y+b.height/2)/innerHeight;return r.exclude?.some(e=>x>=e.left&&x<e.right&&y>=e.top&&y<e.bottom);});})()"),true,'Native region excludes target badge and collapsed Controls from remote mouse capture');
+ assert.equal(await evaluate("$('desk-input-target').getClientRects().length"),0,'Target toggle does not cover desktop when controls are collapsed');
+ assert.equal(await evaluate("(()=>{const color=getComputedStyle($('desk-controls')).backgroundColor;return Number(color.match(/rgba\\([^,]+,[^,]+,[^,]+,\\s*([.0-9]+)\\)/)?.[1])<=.4;})()"),true,'Collapsed Controls background is mostly transparent');
+ assert.equal(await evaluate("(()=>{const r=inputRegions.at(-1),b=$('desk-controls').getBoundingClientRect(),x=(b.x+b.width/2)/innerWidth,y=(b.y+b.height/2)/innerHeight;return r.exclude?.some(e=>x>=e.left&&x<e.right&&y>=e.top&&y<e.bottom);})()"),true,'Native region excludes collapsed Controls from remote mouse capture');
+ await evaluate("desktopClient.getDisplay().getElement().focus();desktopNativeInput({session:desktopId,type:'toggle-target'});void 0");
+ assert.equal(await evaluate('document.activeElement.id'),'desk-controls','Phone target focuses visible Controls rather than a hidden button');
+ await evaluate("desktopNativeInput({session:desktopId,type:'toggle-target'});void 0");
  await call('browsingContext.setViewport',{context,viewport:{width:1024,height:768},devicePixelRatio:1});
  await evaluate('setDeviceLandscape(false);void 0');await delay(60);
  await evaluate("(()=>{const screen=$('screen'),saved=screen.getBoundingClientRect;screen.getBoundingClientRect=()=>({left:-100,top:-100,right:-20,bottom:-20});updateNativeDesktopRegion();screen.getBoundingClientRect=saved;})();void 0");

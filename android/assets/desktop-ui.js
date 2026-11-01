@@ -13,7 +13,7 @@ function setDesktopInputTarget(remote){
  if(desktopKeyboard){desktopKeyboard.onkeydown=desktopInputRemote?desktopBrowserKeyDown:null;desktopKeyboard.onkeyup=desktopInputRemote?desktopBrowserKeyUp:null;}
  setNativeDesktopInput(true);
  if(desktopInputRemote&&!desktopEditorFocused())desktopClient.getDisplay().getElement().focus({preventScroll:true});
- else if(!desktopInputRemote&&desktopClient.getDisplay().getElement().contains(document.activeElement))button.focus({preventScroll:true});
+ else if(!desktopInputRemote&&desktopClient.getDisplay().getElement().contains(document.activeElement))(!fullscreenDesktop&&button.getClientRects().length?button:$('desk-controls')).focus({preventScroll:true});
  toast(desktopInputRemote?'键鼠控制远程桌面 · Ctrl+Alt+空格切回手机':'键鼠控制手机 · Ctrl+Alt+空格切回远程');
 }
 function desktopBrowserKeyDown(key){if(desktopInputRemote)desktopKeyState(key,true,'browser');return !desktopInputRemote;}
@@ -240,7 +240,7 @@ $('desk-inspect').onclick=async()=>{
   if(generation!==desktopGeneration)return;
   const after=await desktopSample(client);
   if(generation!==desktopGeneration)return;
-  const report={version:'0.6.0-beta.4',build:25,mode:desktopRenderMode,cursorPositioning:'layout',sampling:{controlsHidden:true,mayTriggerRepaint:true,automaticEdgeCapture:true},edges:desktopEdgeProbe?.snapshot()||[],before,after,trace:desktopTrace.snapshot()};
+  const report={version:'0.6.0-beta.5',build:26,mode:desktopRenderMode,cursorPositioning:'layout',sampling:{controlsHidden:true,mayTriggerRepaint:true,automaticEdgeCapture:true},edges:desktopEdgeProbe?.snapshot()||[],before,after,trace:desktopTrace.snapshot()};
   try{localStorage.setItem('desktop-last-report',JSON.stringify(report));}catch(e){}
   showDesktopReport(report);
  }catch(e){toast('画面仍在调整，请稍后再检查');}finally{document.body.classList.remove('desktop-sampling');button.disabled=false;}

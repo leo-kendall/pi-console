@@ -36,7 +36,7 @@ SDK={
   Constructor<?> constructor=type.getDeclaredConstructor(Window.class);constructor.setAccessible(true);
   Method fullscreen=type.getDeclaredMethod("setFullscreen",boolean.class,boolean.class);fullscreen.setAccessible(true);
   Method apply=type.getDeclaredMethod("applyInsets",View.class,WindowInsets.class);apply.setAccessible(true);
-  int[] sdks=args.length==0?new int[]{26,27,28,29,30,33,35}:new int[]{Integer.parseInt(args[0])};
+  int[] sdks=args.length==0?new int[]{26,27,28,29,30,33,35,36,37}:new int[]{Integer.parseInt(args[0])};
   Method remaining;try{remaining=type.getDeclaredMethod("remainingInsets",WindowInsets.class);}catch(NoSuchMethodException e){throw new AssertionError("Handled native insets must be zeroed before WebView receives them",e);}remaining.setAccessible(true);
   for(int sdk:sdks){
    Build.VERSION.SDK_INT=sdk;Window window=new Window();Object viewport=constructor.newInstance(window);View view=new View();WindowInsets insets=new WindowInsets();
@@ -96,7 +96,7 @@ class DesktopViewportTests(unittest.TestCase):
    sources=([source] if source.exists() else [])+list(base.rglob('*.java'))
    result=subprocess.run(['javac','--release','8','-d',str(base),*map(str,sources)],capture_output=True,text=True)
    self.assertEqual(result.returncode,0,result.stderr)
-   for sdk in (26,27,28,29,30,33,35):
+   for sdk in (26,27,28,29,30,33,35,36,37):
     with self.subTest(sdk=sdk):
      result=subprocess.run(['java','-cp',str(base),'dev.piconsole.DesktopViewportTest',str(sdk)],capture_output=True,text=True)
      self.assertEqual(result.returncode,0,result.stdout+result.stderr)

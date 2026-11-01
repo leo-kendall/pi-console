@@ -2,11 +2,13 @@
 
 # Pi Console
 
-用 Android 手机管理树莓派和其他 Linux 服务器。
+**把闲置 Android 手机变成树莓派的远程屏幕和控制端。**
+
+也可以用同一个 App 管理树莓派和其他 Linux 服务器。
 
 查看资源占用，管理进程、服务和容器，持续跟随和筛选日志、传文件，或连接服务器桌面。后端部署在自己的服务器上，手机填写地址后配对使用。
 
-[English](README.en.md) · [下载测试版](https://github.com/leo-kendall/pi-console/releases) · [部署](docs/deployment.md) · [配置](docs/configuration.md) · [构建](docs/build.md) · [维护与回退](docs/maintenance.md) · [卸载](docs/uninstall.md)
+[English](README.en.md) · [下载测试版](https://github.com/leo-kendall/pi-console/releases) · [新手部署](docs/deployment.md) · [AI 部署指引](docs/deployment-ai.md) · [功能与优点](docs/features.md) · [Android 兼容性](docs/android-compatibility.md) · [配置](docs/configuration.md) · [构建](docs/build.md) · [维护与回退](docs/maintenance.md) · [卸载](docs/uninstall.md)
 
 ## 界面
 
@@ -20,7 +22,7 @@
 - **查看运行状态**：CPU、温度、内存、磁盘、网络和采样历史。
 - **管理服务与容器**：自动发现 systemd 服务和 Docker 容器，按名称搜索和分类查看。启停、重启和日志需要配置授权，可在手机工具箱中逐项管理；非关键运行对象也可以单次确认结束。
 - **查看进程**：按内存或 CPU 排序，查看进程详情，正常结束应用进程。系统基础进程只读。
-- **操作远程桌面**：连接已配置的本机 RDP 或经典 VNC，横屏全屏、自适应缩放，最高 2560 × 1440。
+- **操作远程桌面**：连接已配置的本机 RDP 或经典 VNC，横屏全屏，自适应、固定／自定义尺寸及屏幕比例，最高 2560 × 1440。闲置手机可用于日常远程桌面操作，省去额外显示器。
 - **传输文件**：在独立文件区上传、下载、重命名，移入回收区后可恢复。单文件上限 8 GiB，支持暂停、续传、后台队列和经本机配置授权的目录。
 - **处理日常维护**：告警记录、存储分析、有限缓存清理、健康概览和配置备份。
 - **收纳应用入口**：把常用网页服务加入“应用”页，在 App 内或外部浏览器打开。
@@ -29,14 +31,14 @@
 
 目前是测试版，主要在 Ubuntu ARM64 上使用和验证。每项新增功能分别经过逻辑边界、接口或原生集成、浏览器与构建验证；实体 Android 设备及各 Linux 桌面环境仍需实际验收。
 
-- 部分 Android 设备在横屏桌面中，把鼠标移到边缘或角落会出现黑块，**尚未修复**。App 的“画面检查”可导出诊断统计。
+- 部分 GPU/WebView 组合仍可能出现绘制异常。已有布局缩放、对称安全区域和绘制模式切换；App 的“画面检查”可导出统计，完整硬件兼容性仍需真机验证。
 - 桌面支持已配置的本机 RDP 与经典 VNC。WayVNC 的 TLS/VeNCrypt/RA2 认证尚不支持，见[桌面兼容范围](docs/desktop-compatibility.md)。监控等其他模块不依赖桌面。
 - 支持触控、实体键鼠、组合键和手动双向文本剪贴板；Android 截留的系统快捷键无法保证送达。
 - 可保存最多 32 台服务器，各自配对和保存偏好，一次连接一台；同一后端的设备按管理员、操作员和只读角色访问。
 
 ## 开始使用
 
-服务器需要 Linux、Python 3.11+ 和 systemd 用户会话，手机需要 Android 8.0+。Docker 与远程桌面组件按需安装。
+服务器需要 Linux、Python 3.11+ 和 systemd 用户会话，手机需要 Android 8.0+ 和可用的现代系统 WebView。Docker 与远程桌面组件按需安装。
 
 ### 1. 启动后端
 
@@ -91,9 +93,10 @@ node tests/test_app_state.cjs
 node tests/test_desktop_layout.cjs
 node tests/test_desktop_diagnostics.cjs
 node tests/test_desktop_edge_probe.cjs
+node tests/test_webview_readiness.cjs
 ```
 
-Android 构建需要 JDK 17+ 与 Android SDK 35，详见[构建说明](docs/build.md)。测试版 APK 使用开发签名。
+Android 构建需要 JDK 17+ 与 Android SDK 35，详见[构建说明](docs/build.md)。Releases APK 沿用固定发布签名；Actions 的开发 APK 使用独立开发签名，不能替代正式包直接覆盖升级。
 
 反馈问题请附上版本、系统环境、复现步骤和去除私人信息的诊断。提交代码前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)；安全问题使用[私密报告渠道](SECURITY.md)。
 

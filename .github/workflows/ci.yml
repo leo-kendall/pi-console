@@ -15,6 +15,13 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
       - name: Python regressions
         run: |
           python3 -B -m unittest discover -s tests -p 'test_*.py'
@@ -24,6 +31,7 @@ jobs:
           python3 -B scripts/test_java.py
           node tests/test_app_state.cjs
           node tests/test_desktop_layout.cjs
+          node tests/test_webview_readiness.cjs
           node tests/test_desktop_diagnostics.cjs
           node tests/test_desktop_edge_probe.cjs
           node tests/test_observability_ui.cjs

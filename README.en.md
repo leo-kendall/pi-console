@@ -2,11 +2,13 @@
 
 # Pi Console
 
-An Android app for managing a Raspberry Pi or another Linux server.
+**Turn a spare Android phone into a remote screen and control terminal for your Raspberry Pi.**
+
+Also manage your Raspberry Pi or another Linux server from the same app.
 
 Check resource usage, manage application processes, services and containers, read logs, transfer files, and connect to an optional remote desktop. Run the backend on your own server, enter its HTTPS address in the app, and pair the device.
 
-[中文文档](README.md) · [Test builds](https://github.com/leo-kendall/pi-console/releases) · [Deployment](docs/deployment.md) · [Configuration](docs/configuration.md) · [Build](docs/build.md) · [Maintenance](docs/maintenance.md) · [Uninstall](docs/uninstall.md)
+[中文文档](README.md) · [Test builds](https://github.com/leo-kendall/pi-console/releases) · [Human deployment guide](docs/deployment.md) · [AI deployment runbook](docs/deployment-ai.md) · [Features](docs/features.md) · [Android compatibility](docs/android-compatibility.md) · [Configuration](docs/configuration.md) · [Build](docs/build.md) · [Maintenance](docs/maintenance.md) · [Uninstall](docs/uninstall.md)
 
 ## Screenshots
 
@@ -20,7 +22,7 @@ Demo data: overview and service management.
 - Live CPU, temperature, memory, disk and network metrics with sampling history.
 - Automatic discovery of systemd services and Docker containers. Persistent controls and logs require configuration; eligible running applications can also be stopped after one-time confirmation.
 - Process details and sorting by memory or CPU. Application processes can be terminated normally; essential system processes remain read-only.
-- Configured local RDP or classic VNC desktop, landscape fullscreen and adaptive scaling up to 2560 × 1440.
+- Configured local RDP or classic VNC desktop, landscape fullscreen, adaptive/fixed/custom sizes and selectable aspect ratios up to 2560 × 1440. A spare phone can replace a separate monitor for everyday remote GUI work.
 - An isolated file area with uploads, downloads, renaming and trash/restore, up to 8 GiB per file.
 - Alerts, storage analysis, limited cache cleanup, a health summary and configuration backup.
 - Custom links to your web applications.
@@ -31,14 +33,14 @@ Demo data: overview and service management.
 
 This is a beta, mainly exercised on Ubuntu ARM64. The app UI is currently in Chinese.
 
-- Some Android devices show a black area when the pointer reaches desktop edges or corners in landscape mode. **This remains unresolved.** The in-app display check can export diagnostic statistics.
+- Some GPU/WebView combinations may still have rendering issues. Layout scaling, balanced safe areas and selectable render modes are available; hardware compatibility still requires real-device validation. The display check exports aggregate diagnostics.
 - Desktop support targets configured local RDP and classic VNC. WayVNC TLS/VeNCrypt/RA2 authentication is not supported; see [desktop compatibility](docs/desktop-compatibility.md).
 - Touchpad gestures, text sending, physical keyboard/mouse, modifier keys and explicit bidirectional text clipboard are available. Android-reserved shortcuts may remain local.
 - Save up to 32 independently paired server profiles and connect to one at a time. Backend devices have administrator, operator or viewer roles; authorized devices share that server's configured resources and file spaces.
 
 ## Getting started
 
-Requires Linux, Python 3.11+, a systemd user session and Android 8.0+. Docker and desktop components are optional.
+Requires Linux, Python 3.11+, a systemd user session and Android 8.0+ with a capable, enabled system WebView. Docker and desktop components are optional.
 
 ```sh
 git clone https://github.com/leo-kendall/pi-console.git

@@ -11,7 +11,7 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Android/WebView version, Linux distribution and optional desktop setup. Do not include private addresses or passwords.
+      description: Phone/tablet model, Android version, system WebView package/version, screen orientation/aspect/density and font scale; Linux distribution and optional desktop setup. Do not include private addresses or passwords.
     validations:
       required: true
   - type: textarea

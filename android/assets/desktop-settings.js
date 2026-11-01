@@ -85,3 +85,4 @@ function showDesktopDisplaySettings(){
 }
 $('desk-display').onclick=$('desktop-display-options').onclick=showDesktopDisplaySettings;
 $('sheet').addEventListener('close',()=>{if(desktopClient)scheduleDesktopResize();});
+window.desktopSettingsReady=true;

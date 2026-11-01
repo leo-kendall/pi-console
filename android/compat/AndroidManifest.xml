@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.piconsole.compat"
+    android:versionCode="1" android:versionName="1">
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+    <application android:label="@string/app_name" android:allowBackup="false" />
+    <instrumentation android:name="dev.piconsole.compat.CompatInstrumentation"
+        android:targetPackage="dev.piconsole" android:functionalTest="true" />
+</manifest>

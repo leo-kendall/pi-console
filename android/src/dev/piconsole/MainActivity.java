@@ -17,6 +17,7 @@ import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
  private WebView web;
+ private boolean webReady=false;
  private android.widget.FrameLayout webFrame;
  private FileTransfer files;
  private BackupTransfer backup;
@@ -33,7 +34,8 @@ public final class MainActivity extends Activity {
   int bg=android.graphics.Color.parseColor(dark?"#101114":"#F3F4F7");
   getWindow().setStatusBarColor(bg);getWindow().setNavigationBarColor(bg);
   getWindow().getDecorView().setSystemUiVisibility(dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
-  web=new WebView(this);web.setBackgroundColor(bg);
+  try{web=new WebView(this);}catch(RuntimeException unavailable){showWebViewRecovery(true);return;}
+  web.setBackgroundColor(bg);
   getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
   desktopViewport=new DesktopViewport(getWindow());
   webFrame=new android.widget.FrameLayout(this);webFrame.setBackgroundColor(bg);
@@ -56,9 +58,38 @@ public final class MainActivity extends Activity {
      return new WebResourceResponse(mime,"UTF-8",200,"OK",headers,getAssets().open(name));
     }catch(Exception e){return blocked();}
    }
-   @Override public void onPageFinished(WebView v,String url){if(getResources().getConfiguration().fontScale>1.3f)v.evaluateJavascript("document.body.classList.add('large-text')",null);notifyOrientation();v.evaluateJavascript("window.resumeApp&&resumeApp()",null);}
+   @Override public void onPageFinished(WebView v,String url){checkWebViewReadiness(v);}
   });
   web.loadUrl(origin+"index.html");
+ }
+ private void checkWebViewReadiness(WebView view){
+  final String script;
+  try(InputStream stream=getAssets().open("compatibility-check.js");Scanner scanner=new Scanner(stream,"UTF-8")){
+   scanner.useDelimiter("\\A");script=scanner.hasNext()?scanner.next():"false";
+  }catch(Exception missing){showWebViewRecovery(false);return;}
+  view.evaluateJavascript(script,value->{
+   if(isDestroyed()||view!=web)return;
+   try{
+    JSONObject state=new JSONObject(value);
+    if(!state.optBoolean("ready")){showWebViewRecovery(!state.optBoolean("supported"));return;}
+   }catch(Exception failed){showWebViewRecovery(false);return;}
+   webReady=true;
+   if(getResources().getConfiguration().fontScale>1.3f)view.evaluateJavascript("document.body.classList.add('large-text')",null);
+   notifyOrientation();view.evaluateJavascript("window.resumeApp&&resumeApp()",null);
+  });
+ }
+ private void showWebViewRecovery(boolean updateRequired){
+  webReady=false;
+  android.widget.LinearLayout box=new android.widget.LinearLayout(this);box.setTag(updateRequired?"webview-update-required":"webview-load-failed");box.setOrientation(android.widget.LinearLayout.VERTICAL);box.setGravity(android.view.Gravity.CENTER_VERTICAL);
+  int padding=Math.round(24*getResources().getDisplayMetrics().density);box.setPadding(padding,padding,padding,padding);
+  android.widget.TextView title=new android.widget.TextView(this);title.setText(updateRequired?"需要更新网页组件":"应用界面未能加载");title.setTextSize(22);
+  android.widget.TextView detail=new android.widget.TextView(this);detail.setText(updateRequired?"系统 WebView 组件不可用，或尚不支持此版本所需的网页功能。请在系统设置、系统更新或应用商店中启用／更新 Android System WebView 或 Chrome，再点击重试。不会移除你的服务器配置或配对。":"应用界面没有完整加载。请点击重试；如果仍无法加载，请重新安装同签名的官方发布包，并反馈版本与系统环境。此操作不会移除服务器配置或配对。");detail.setTextSize(16);detail.setPadding(0,padding,0,padding);
+  android.widget.Button settings=new android.widget.Button(this);settings.setText("打开应用设置");settings.setTag("webview-open-settings");settings.setOnClickListener(v->{try{startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_SETTINGS));}catch(Exception unavailable){android.widget.Toast.makeText(this,"请从系统设置更新网页组件",android.widget.Toast.LENGTH_LONG).show();}});
+  android.widget.Button retry=new android.widget.Button(this);retry.setText("重试");retry.setTag("webview-retry");retry.setOnClickListener(v->recreate());
+  box.addView(title);box.addView(detail);box.addView(settings);box.addView(retry);android.widget.ScrollView scroll=new android.widget.ScrollView(this);scroll.setFillViewport(true);scroll.addView(box);
+  if(desktopViewport==null)desktopViewport=new DesktopViewport(getWindow());
+  scroll.setOnApplyWindowInsetsListener((v,insets)->{desktopViewport.applyInsets(v,insets);return desktopViewport.remainingInsets(insets);});
+  setContentView(scroll);
  }
  private void notifyOrientation(){if(web!=null)web.evaluateJavascript("window.setDeviceLandscape&&setDeviceLandscape("+(getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE)+")",null);}
  private void setDesktopFullscreen(boolean enabled){
@@ -179,10 +210,10 @@ public final class MainActivity extends Activity {
   }
  }
  @Override protected void onPause(){if(desktopInput!=null){desktopInput.setShortcutSession("");desktopInput.setSession("");}setDesktopFullscreen(false);if(web!=null)web.evaluateJavascript("window.pauseApp&&pauseApp()",null);super.onPause();}
- @Override protected void onResume(){super.onResume();if(web!=null)web.evaluateJavascript("window.resumeApp&&resumeApp()",null);}
+ @Override protected void onResume(){super.onResume();if(webReady&&web!=null)web.evaluateJavascript("window.resumeApp&&resumeApp()",null);}
  void backupEvent(String type,JSONObject event){runOnUiThread(()->{if(!isDestroyed())web.evaluateJavascript("window.backupEvent&&backupEvent("+JSONObject.quote(type)+","+event.toString()+")",null);});}
  void fileProgress(JSONObject progress){runOnUiThread(()->{if(!isDestroyed())web.evaluateJavascript("window.fileTransferProgress&&fileTransferProgress("+progress.toString()+")",null);});}
  @Override protected void onActivityResult(int request,int code,Intent data){super.onActivityResult(request,code,data);if(files!=null)files.result(request,code,data);if(backup!=null)backup.result(request,code,data);if(textExport!=null)textExport.result(request,code,data);}
- @Override public void onBackPressed(){web.evaluateJavascript("window.appBack&&appBack()",null);}
+ @Override public void onBackPressed(){if(!webReady||web==null){super.onBackPressed();return;}web.evaluateJavascript("window.appBack&&appBack()",null);}
  @Override protected void onDestroy(){if(files!=null)files.close();if(backup!=null)backup.close();if(textExport!=null)textExport.close();pool.shutdown();if(web!=null){web.removeJavascriptInterface("Pi");web.destroy();}super.onDestroy();}
 }

@@ -12,7 +12,7 @@ body.desktop-fullscreen{background:#08090b}
 .desktop-fullscreen #screen{flex:none}
 .desktop-fullscreen #screen-scroll.desktop-zoomed{align-items:flex-start;justify-content:flex-start}
 .desktop-fullscreen #desktop-status,.desktop-fullscreen #desktop-session>.footnote{display:none}
-#desk-controls{position:absolute;top:max(8px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right));z-index:6;background:#10111440;color:#fff;border:1px solid #ffffff38;border-radius:24px;min-width:56px;padding:8px 12px;font-size:13px;text-shadow:0 1px 3px #000}
+#desk-controls{position:absolute;top:max(8px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right));z-index:6;--desk-controls-alpha:.25;background:rgba(16,17,20,var(--desk-controls-alpha));color:rgba(255,255,255,var(--desk-controls-alpha));border:1px solid #ffffff38;border-radius:24px;min-width:56px;padding:8px 12px;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,var(--desk-controls-alpha))}
 .desktop-fullscreen .desktop-toolbar{display:none}
 .desktop-fullscreen.desktop-controls-open .desktop-primary{display:flex;position:absolute;top:8px;left:8px;right:88px;z-index:5;flex-wrap:nowrap;margin:0;padding:4px;border-radius:16px;background:#1c1e24eF;overflow-x:auto}
 .desktop-fullscreen .desktop-toolbar button{background:#30333b;color:#fff;flex:0 0 auto;min-width:48px;padding:8px 14px;white-space:nowrap}
@@ -55,5 +55,5 @@ body.desktop-fullscreen{background:#08090b}
 #server-profiles .profile-row{padding:12px 0;border-bottom:1px solid var(--line)}[data-modifier][aria-pressed=true]{background:var(--accent);color:white}
 
 #desk-input-target{min-width:88px}
-#desk-controls:focus-visible,#desk-controls:hover{background:#101114a6}
+#desk-controls:focus-visible,#desk-controls:hover{--desk-controls-alpha:.65}
 .desktop-fullscreen .desktop-toolbar{overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#ffffff66 transparent;scroll-padding:4px}

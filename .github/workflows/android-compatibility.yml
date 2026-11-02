@@ -36,6 +36,9 @@ jobs:
           api-level: ${{ matrix.api }}
           target: google_apis
           arch: x86_64
+          # Tiny default AVDs clamp wm overrides; use a 1080x1920 base display.
+          profile: pixel_2
+          ram-size: 2048M
           disable-animations: true
           # The API33 image defaults to a 7 GiB userdata partition, exceeding
           # free space on some hosted runners. These offline tests use <50 MiB.

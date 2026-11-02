@@ -35,6 +35,17 @@ class CompatibilityHarnessTests(unittest.TestCase):
             with self.subTest(output=bad), self.assertRaises(ValueError):
                 runner.parse_instrumentation(bad)
 
+    def test_display_size_requires_actual_override_and_fullscreen_window(self):
+        runner = self.runner()
+        self.assertEqual(runner.effective_display_size('Physical size: 1080x1920\nOverride size: 1080x2400\n'), [1080,2400])
+        self.assertEqual(runner.effective_display_size('Physical size: 1080x1920\n'), [1080,1920])
+        with self.assertRaises(ValueError):
+            runner.effective_display_size('Error: unavailable')
+        report = {'full_ui_tested': True, 'scenarios': [{'name':'fullscreen-portrait-2560', 'native':{'window':[1080,1920]}}]}
+        with self.assertRaises(ValueError):
+            runner.verify_display_report(report, [1080,2400])
+        runner.verify_display_report(report, [1080,1920])
+
     def test_runner_without_run_flag_never_installs(self):
         self.runner()
         result = subprocess.run([sys.executable, str(ROOT / 'scripts/test_android_compat.py')],

@@ -36,6 +36,21 @@ def parse_instrumentation(output, require_full_ui=False):
     return report
 
 
+def effective_display_size(output):
+    sizes = re.findall(r'^(Physical|Override) size:\s*(\d+)x(\d+)\s*$', output, re.M)
+    if not sizes:
+        raise ValueError('Missing window-manager display size')
+    selected = next((size for size in reversed(sizes) if size[0] == 'Override'), sizes[-1])
+    return [int(selected[1]), int(selected[2])]
+
+
+def verify_display_report(report, expected):
+    if report.get('full_ui_tested'):
+        portrait = next((row for row in report['scenarios'] if row.get('name') == 'fullscreen-portrait-2560'), None)
+        if not portrait or sorted(portrait['native']['window']) != sorted(expected):
+            raise ValueError('App fullscreen window does not match requested display size')
+
+
 def require_emulator(qemu):
     if qemu.strip() != '1':
         raise ValueError('Refusing app installation/data clearing on a non-emulator device')
@@ -54,7 +69,11 @@ def main():
     parser.add_argument('--label', default='default')
     parser.add_argument('--require-full-ui', action='store_true',
                         help='Fail if an outdated WebView only exercises the native update recovery UI')
+    parser.add_argument('--display-size', help='Required effective emulator size, for example 1080x2400')
     args = parser.parse_args()
+    if args.display_size and not re.fullmatch(r'[1-9][0-9]{2,3}x[1-9][0-9]{2,3}', args.display_size):
+        parser.error('Invalid --display-size')
+    expected_size = [int(n) for n in args.display_size.split('x')] if args.display_size else None
     if not args.serial:
         parser.error('--serial or ANDROID_SERIAL must identify the emulator')
     if not re.fullmatch(r'[a-zA-Z0-9_.-]{1,80}', args.label):
@@ -66,6 +85,7 @@ def main():
     output_dir = ROOT / 'build/compatibility' / args.label
     output_dir.mkdir(parents=True, exist_ok=True)
     output = ''
+    display_evidence = {'requested_display_size': expected_size}
 
     def device(*command, timeout=60):
         return subprocess.run([adb, '-s', args.serial, *command], check=True, text=True,
@@ -74,6 +94,7 @@ def main():
 
     try:
         require_emulator(device('shell', 'getprop', 'ro.kernel.qemu'))
+        display_evidence['display_size_before_install'] = device('shell', 'wm', 'size').strip()
         # Always fresh source builds; --reuse-debug exists only on the compile-only builder.
         subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/build_android_compat.py')], check=True)
         artifacts = json.loads((ROOT / 'build/android-compat/artifacts.json').read_text())
@@ -83,10 +104,17 @@ def main():
                 raise ValueError('Development APK install did not report success')
         if 'Success' not in device('shell', 'pm', 'clear', 'dev.piconsole'):
             raise ValueError('Could not reset emulator app data for offline first launch')
+        display_evidence['display_size_before_instrumentation'] = device('shell', 'wm', 'size').strip()
+        print(json.dumps(display_evidence), flush=True)
+        if expected_size and effective_display_size(display_evidence['display_size_before_instrumentation']) != expected_size:
+            raise ValueError('Window-manager size override did not take effect')
         output = device('shell', 'am', 'instrument', '-w', '-r',
                         'dev.piconsole.compat/dev.piconsole.compat.CompatInstrumentation', timeout=240)
         (output_dir / 'instrumentation.log').write_text(output)
         report = parse_instrumentation(output, require_full_ui=args.require_full_ui)
+        report.update(display_evidence)
+        if expected_size:
+            verify_display_report(report, expected_size)
         report.update({'label': args.label, 'app_sha256': artifacts['app_sha256'],
                        'test_sha256': artifacts['test_sha256']})
         (output_dir / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
@@ -106,6 +134,7 @@ def main():
                     failure_report = decoded
             except ValueError:
                 pass
+        failure_report.update(display_evidence)
         failure_report.update({'passed': False, 'label': args.label, 'runner_failure': str(error)[:1000]})
         (output_dir / 'report.json').write_text(json.dumps(failure_report, indent=2) + '\n')
         raise SystemExit('Android compatibility failed: ' + str(error)) from None

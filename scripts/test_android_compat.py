@@ -51,6 +51,23 @@ def verify_display_report(report, expected):
             raise ValueError('App fullscreen window does not match requested display size')
 
 
+def summarize_process_crash(crash, exit_info):
+    # Export identifiers/codes only, never exception messages, URLs or payloads.
+    def unique(values, limit):
+        return list(dict.fromkeys(values))[:limit]
+    return {
+        'exit_reason_codes': unique([int(v) for v in re.findall(r'\breason=(\d+)', exit_info)], 8),
+        'exit_status_codes': unique([int(v) for v in re.findall(r'\bstatus=(\d+)', exit_info)], 8),
+        'signals': [{'number': int(n), 'name': name} for n, name in
+                    unique(re.findall(r'Fatal signal (\d+) \((SIG[A-Z0-9]+)\)', crash), 8)],
+        'exception_classes': unique(re.findall(r'\b((?:java\.lang|java\.util|android(?:\.[A-Za-z0-9_$]+)+|dev\.piconsole)\.[A-Za-z0-9_$]*(?:Error|Exception))\b', crash), 16),
+        'java_frames': unique(re.findall(r'\bat ((?:dev\.piconsole|android|java|org\.chromium)\.[A-Za-z0-9_.$]+)\(', crash), 24),
+        'native_libraries': unique(re.findall(r'/(lib[A-Za-z0-9_-]{1,80}\.so)\b', crash), 16),
+        'unhandled_renderer_exit': "crash wasn't handled" in crash.lower(),
+        'jni_fatal': 'JNI DETECTED ERROR IN APPLICATION' in crash,
+    }
+
+
 def require_emulator(qemu):
     if qemu.strip() != '1':
         raise ValueError('Refusing app installation/data clearing on a non-emulator device')
@@ -134,6 +151,18 @@ def main():
                     failure_report = decoded
             except ValueError:
                 pass
+        if 'Process crashed' in output:
+            # This runs only after the emulator guard and fresh app-data reset.
+            # The raw buffers stay in memory and are discarded after parsing.
+            crash, exit_info = '', ''
+            try:
+                crash = device('shell', 'logcat', '-b', 'crash', '-d', '-t', '160', timeout=10)
+                crash += device('shell', 'logcat', '-b', 'main', '-d', '-t', '120', '-s',
+                                'AndroidRuntime:E', 'chromium:E', 'cr_AwContents:E', 'libc:F', 'DEBUG:F', '*:S', timeout=10)
+                exit_info = device('shell', 'dumpsys', 'activity', 'exit-info', 'dev.piconsole', timeout=10)
+            except (OSError, subprocess.SubprocessError):
+                pass
+            failure_report['process_crash'] = summarize_process_crash(crash, exit_info)
         failure_report.update(display_evidence)
         failure_report.update({'passed': False, 'label': args.label, 'runner_failure': str(error)[:1000]})
         (output_dir / 'report.json').write_text(json.dumps(failure_report, indent=2) + '\n')

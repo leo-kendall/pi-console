@@ -46,6 +46,23 @@ class CompatibilityHarnessTests(unittest.TestCase):
             runner.verify_display_report(report, [1080,2400])
         runner.verify_display_report(report, [1080,1920])
 
+    def test_crash_summary_keeps_fixed_diagnostics_without_private_messages(self):
+        runner = self.runner()
+        raw = ("Fatal signal 11 (SIGSEGV) in tid 123\n"
+               "java.lang.IllegalStateException: PRIVATE_VALUE https://private.invalid/token\n"
+               " at dev.piconsole.MainActivity.onCreate(MainActivity.java:44)\n"
+               " #00 pc 1234 /apex/runtime/lib64/libwebview.so (function)\n"
+               "Render process crash wasn't handled\nreason=5 (CRASH_NATIVE) status=11\n")
+        report = runner.summarize_process_crash(raw, raw)
+        self.assertEqual(report['exit_reason_codes'], [5])
+        self.assertEqual(report['signals'], [{'number':11,'name':'SIGSEGV'}])
+        self.assertIn('dev.piconsole.MainActivity.onCreate', report['java_frames'])
+        self.assertIn('libwebview.so', report['native_libraries'])
+        self.assertTrue(report['unhandled_renderer_exit'])
+        self.assertNotIn('PRIVATE_VALUE', json.dumps(report))
+        self.assertNotIn('https:', json.dumps(report))
+        self.assertLess(len(report['java_frames']), 25)
+
     def test_runner_without_run_flag_never_installs(self):
         self.runner()
         result = subprocess.run([sys.executable, str(ROOT / 'scripts/test_android_compat.py')],

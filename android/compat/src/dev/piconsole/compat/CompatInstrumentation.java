@@ -224,6 +224,7 @@ public final class CompatInstrumentation extends Instrumentation {
 
     private JSONObject pixelColor(JSONObject geometry) throws Exception {
         JSONArray frame = geometry.getJSONArray("frame"), viewport = geometry.getJSONArray("viewport");
+        JSONArray overlay = geometry.getJSONArray("overlay");
         CountDownLatch done = new CountDownLatch(1);
         JSONObject result = new JSONObject();
         AtomicReference<Throwable> error = new AtomicReference<>();
@@ -246,19 +247,28 @@ public final class CompatInstrumentation extends Instrumentation {
                     try {
                         result.put("status", status);
                         check(status == PixelCopy.SUCCESS, "pixelcopy-status");
-                        int matched = 0, samples = 0;
+                        int matched = 0, samples = 0, excludedOverlay = 0;
                         // Includes old/new resize boundary, center, right edge and all quadrants.
                         for (int x : new int[]{8, 40, 80, 92, 112, 144, 157}) {
                             for (int y : new int[]{10, 25, 55, 75, 90}) {
+                                double cx = (source.left + source.width() * (x + .5) / 160 - location[0]) / sx;
+                                double cy = (source.top + source.height() * (y + .5) / 100 - location[1]) / sy;
+                                if (overlay.getDouble(2) > 0 && overlay.getDouble(3) > 0
+                                    && cx >= overlay.getDouble(0) && cx <= overlay.getDouble(0) + overlay.getDouble(2)
+                                    && cy >= overlay.getDouble(1) && cy <= overlay.getDouble(1) + overlay.getDouble(3)) {
+                                    excludedOverlay++; continue;
+                                }
                                 int color = bitmap.getPixel(x, y);
+                                int[] expected = x < 53 ? new int[]{31,177,107}
+                                    : x < 106 ? new int[]{40,120,220} : new int[]{220,130,40};
                                 samples++;
-                                if (Math.abs(Color.red(color) - 31) <= 12
-                                    && Math.abs(Color.green(color) - 177) <= 12
-                                    && Math.abs(Color.blue(color) - 107) <= 12) matched++;
+                                if (Math.abs(Color.red(color) - expected[0]) <= 12
+                                    && Math.abs(Color.green(color) - expected[1]) <= 12
+                                    && Math.abs(Color.blue(color) - expected[2]) <= 12) matched++;
                             }
                         }
-                        result.put("matched", matched).put("samples", samples);
-                        check(matched == samples, "presented-frame-color");
+                        result.put("matched", matched).put("samples", samples).put("excludedControlSamples", excludedOverlay);
+                        check(samples >= 30 && matched == samples, "presented-frame-color");
                     } catch (Throwable value) { error.set(value); }
                     finally { bitmap.recycle(); done.countDown(); }
                 }, ui);

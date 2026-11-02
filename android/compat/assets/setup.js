@@ -5,10 +5,17 @@ window.__compatErrors = 0;
 addEventListener('error', () => { window.__compatErrors++; });
 addEventListener('unhandledrejection', () => { window.__compatErrors++; });
 window.__compatFrame = (...parts) => parts.map(p => String(p).length + '.' + p).join(',') + ';';
-window.__compatColor = (w, h) => __compatFrame('size', 0, w, h)
-    + __compatFrame('rect', 0, 0, 0, w, h)
-    + __compatFrame('cfill', 14, 0, 31, 177, 107, 255)
-    + __compatFrame('sync', 1);
+window.__compatColor = (w, h) => {
+    const first = Math.floor(w / 3), second = Math.floor(2 * w / 3);
+    return __compatFrame('size', 0, w, h)
+        + __compatFrame('rect', 0, 0, 0, w, h)
+        + __compatFrame('cfill', 14, 0, 31, 177, 107, 255)
+        + __compatFrame('rect', 0, first, 0, second - first, h)
+        + __compatFrame('cfill', 14, 0, 40, 120, 220, 255)
+        + __compatFrame('rect', 0, second, 0, w - second, h)
+        + __compatFrame('cfill', 14, 0, 220, 130, 40, 255)
+        + __compatFrame('sync', 1);
+};
 window.__compatIncoming = '';
 window.__compatOpened = null;
 window.__compatSizes = [];

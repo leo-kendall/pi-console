@@ -28,11 +28,13 @@ Pi Console 面向主流 Android 手机和平板，不按小米、三星、OPPO�
 
 ## 持续集成矩阵
 
-[Android compatibility matrix](https://github.com/leo-kendall/pi-console/actions/workflows/android-compatibility.yml) 配置 API26、28、30、33、35、36、37，覆盖16:9、20:9，以及系统镜像提供时的角落摄像头模拟。每次运行都保留有界几何和颜色统计，不导出桌面截图、文本或按键。
+[Android compatibility matrix](https://github.com/leo-kendall/pi-console/actions/workflows/android-compatibility.yml) 配置 API26、28、30、33、35、36，覆盖16:9、20:9，以及系统镜像提供时的角落摄像头模拟。每次运行都保留有界几何和颜色统计，不导出桌面截图、文本或按键。
 
 旧系统镜像附带的旧 WebView 可以只验证原生更新提示，但报告必须标为 `requires-webview-update`，且 `full_ui_tested=false`；不能当作完整功能通过。较新镜像必须通过完整界面测试。报告明确区分“已配置测试”“实际执行结果”和“仍待真机验证”。
 
-本次新增模拟器流水线的实际结果以对应 commit 的 Actions 报告为准；提交文档本身不等于测试通过。
+本次新增模拟器流水线的实际结果以对应 commit 的 Actions 报告为准；提交文档本身不等于测试通过。API37 的一次实际尝试在 SDK 下载阶段因 `platforms;android-37` 不可用而停止，尚未运行 App，不计入运行时覆盖；待官方 SDK／系统镜像在构建环境中可用后再加入必需矩阵。
+
+不同 WebView 对 CSS zoom 的矩形坐标口径不同，测试会用独立元素检测实际行为并换算到视口坐标。原生 PixelCopy 检查三种分区颜色，防止把裁切／未缩放的画面误判为正常；只排除可见“控件”浮动按钮占用的少量取样点，仍要求至少 30 个有效颜色点。
 
 ## 本机／模拟器复现
 

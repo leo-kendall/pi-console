@@ -2,12 +2,26 @@
 (() => {
     const d = desktopClient.getDisplay(), s = $('screen').getBoundingClientRect();
     const viewport = $('screen-scroll').getBoundingClientRect();
-    const root = d.getElement().firstElementChild.getBoundingClientRect();
-    const cursor = d.getCursorLayer().getElement().getBoundingClientRect();
+    // Pre-M128 CSS zoom reports rectangles in unzoomed coordinates. Detect
+    // actual semantics rather than inferring them from a provider version.
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;left:0;top:0;width:20px;height:20px;zoom:.5;visibility:hidden;pointer-events:none';
+    document.body.appendChild(probe);
+    const legacyZoomCoordinates = Math.abs(probe.getBoundingClientRect().width - 20) < .1;
+    probe.remove();
+    const layer = d.getElement().firstElementChild;
+    const factor = legacyZoomCoordinates ? Number(getComputedStyle(layer).zoom) || 1 : 1;
+    const normalize = element => {
+        const b = element.getBoundingClientRect();
+        return {x:b.x*factor,y:b.y*factor,width:b.width*factor,height:b.height*factor};
+    };
+    const root = normalize(layer), cursor = normalize(d.getCursorLayer().getElement());
+    const toggle = $('desk-controls'), control = toggle.getBoundingClientRect();
     const box = b => [b.x, b.y, b.width, b.height].map(n => Math.round(n * 100) / 100);
     const close = (a, b) => Math.abs(a - b) < 1.5;
     return {
         viewport: [innerWidth, innerHeight], frame: box(s), container: box(viewport),
+        legacyZoomCoordinates, overlay: toggle.hidden ? [0,0,0,0] : box(control),
         content: box(root), remote: [d.getWidth(), d.getHeight()], scale: d.getScale(),
         fullscreen: fullscreenDesktop, presentation: desktopScaling.mode,
         fit: s.width > 0 && s.height > 0 && s.width <= viewport.width + 1.5

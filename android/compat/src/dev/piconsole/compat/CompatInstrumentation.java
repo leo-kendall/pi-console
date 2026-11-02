@@ -208,12 +208,43 @@ public final class CompatInstrumentation extends Instrumentation {
             result.put("parentPadding", numbers(l, t, r, b));
             result.put("hardwareAccelerated", web.isHardwareAccelerated());
             result.put("layerType", web.getLayerType());
+            if (Build.VERSION.SDK_INT >= 28)
+                result.put("cutoutMode", activity.getWindow().getAttributes().layoutInDisplayCutoutMode);
             result.put("keepScreenOn", keepScreen);
             if (insets != null) {
                 result.put("systemInsets", numbers(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
                     insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom()));
-                if (Build.VERSION.SDK_INT >= 30)
+                if (Build.VERSION.SDK_INT >= 30) {
                     result.put("systemBarsVisible", insets.isVisible(WindowInsets.Type.systemBars()));
+                    result.put("statusBarVisible", insets.isVisible(WindowInsets.Type.statusBars()));
+                    result.put("navigationBarVisible", insets.isVisible(WindowInsets.Type.navigationBars()));
+                }
+                if (!fullscreen) {
+                    int el = insets.getSystemWindowInsetLeft(), et = insets.getSystemWindowInsetTop();
+                    int er = insets.getSystemWindowInsetRight(), eb = insets.getSystemWindowInsetBottom();
+                    if (Build.VERSION.SDK_INT >= 30) {
+                        android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
+                        el=bars.left; et=bars.top; er=bars.right;
+                        eb=Math.max(bars.bottom,insets.getInsets(WindowInsets.Type.ime()).bottom);
+                    }
+                    if (Build.VERSION.SDK_INT >= 28 && insets.getDisplayCutout() != null) {
+                        android.view.DisplayCutout cutout = insets.getDisplayCutout();
+                        el=Math.max(el,cutout.getSafeInsetLeft()); et=Math.max(et,cutout.getSafeInsetTop());
+                        er=Math.max(er,cutout.getSafeInsetRight()); eb=Math.max(eb,cutout.getSafeInsetBottom());
+                    }
+                    // Decor fitting may already reserve bars outside this parent
+                    // (API33), while enforced edge-to-edge leaves all reservation
+                    // to the parent (API35+). Count each safe edge exactly once.
+                    int[] parentLocation = new int[2]; parent.getLocationInWindow(parentLocation);
+                    el=Math.max(0,el-parentLocation[0]); et=Math.max(0,et-parentLocation[1]);
+                    er=Math.max(0,er-(decor.getWidth()-parentLocation[0]-parent.getWidth()));
+                    eb=Math.max(0,eb-(decor.getHeight()-parentLocation[1]-parent.getHeight()));
+                    result.put("parent", numbers(parentLocation[0],parentLocation[1],parent.getWidth(),parent.getHeight()));
+                    result.put("expectedNormalPadding", numbers(el,et,er,eb));
+                    check(l==el && t==et && r==er && b==eb, "normal-padding-current-system-insets");
+                    check(web.getWidth()==parent.getWidth()-l-r && web.getHeight()==parent.getHeight()-t-b,
+                        "normal-content-fills-safe-parent");
+                }
             }
             Point screen = new Point();
             web.getDisplay().getRealSize(screen);
@@ -373,14 +404,13 @@ public final class CompatInstrumentation extends Instrumentation {
             report.put("offlineFirstLaunch", true);
             geometryScript = asset("geometry.js");
             rotate(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, Configuration.ORIENTATION_PORTRAIT, false);
-            JSONObject normal = nativeGeometry(false);
             // Listener installation and synthetic transport occur only inside this test APK.
             String setup = asset("setup.js");
             js("(()=>{" + setup + "\nreturn true;})()");
             waitJs("Boolean(desktopClient&&desktopClient.getDisplay().getWidth()===1280)", "initial-frame");
             check(Boolean.TRUE.equals(js("window.__compatOpened.width===1280&&window.__compatOpened.height===800")),
                 "initial-open-dimensions");
-            scenario("portrait-1280", false);
+            JSONObject normal = scenario("portrait-1280", false).getJSONObject("native");
             selectResolution("2560,1440");
             waitJs("window.__compatSizes.some(s=>s[0]===2560&&s[1]===1440)", "outbound-2560-request");
             waitJs("desktopClient.getDisplay().getWidth()===2560", "resized-frame");
@@ -391,10 +421,16 @@ public final class CompatInstrumentation extends Instrumentation {
             scenario("fullscreen-landscape-2560", true);
             rotate(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, Configuration.ORIENTATION_PORTRAIT, false);
             JSONObject restored = scenario("restored-portrait-2560", false).getJSONObject("native");
-            check(normal.getJSONArray("parentPadding").toString().equals(restored.getJSONArray("parentPadding").toString()),
-                "normal-insets-not-restored");
-            check(normal.getJSONArray("web").toString().equals(restored.getJSONArray("web").toString()),
-                "normal-web-bounds-not-restored");
+            // Rotation can change Android's navigation-bar height. Verify the
+            // restored policy against CURRENT framework insets, not stale pixels.
+            if (Build.VERSION.SDK_INT >= 28)
+                check(normal.getInt("cutoutMode")==restored.getInt("cutoutMode"), "normal-cutout-mode-not-restored");
+            if (Build.VERSION.SDK_INT >= 30) {
+                check(normal.getBoolean("statusBarVisible")==restored.getBoolean("statusBarVisible"),
+                    "normal-status-bar-policy-not-restored");
+                check(normal.getBoolean("navigationBarVisible")==restored.getBoolean("navigationBarVisible"),
+                    "normal-navigation-bar-policy-not-restored");
+            }
             selectResolution("1920,1080");
             waitJs("window.__compatSizes.some(s=>s[0]===1920&&s[1]===1080)", "outbound-1920-request");
             waitJs("desktopClient.getDisplay().getWidth()===1920&&desktopClient.getDisplay().getHeight()===1080",

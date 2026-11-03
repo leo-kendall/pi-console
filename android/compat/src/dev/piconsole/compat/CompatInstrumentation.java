@@ -406,11 +406,17 @@ public final class CompatInstrumentation extends Instrumentation {
         report.put("immersiveTutorialObserved",tutorial);
         if(!tutorial) return;
         android.accessibilityservice.AccessibilityServiceInfo info=getUiAutomation().getServiceInfo();
-        info.flags|=android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS;
+        info.flags|=android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+            |android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
         getUiAutomation().setServiceInfo(info);
         android.view.accessibility.AccessibilityNodeInfo root=getUiAutomation().getRootInActiveWindow();
         check(root!=null,"immersive-tutorial-root-missing");
         try {
+            android.view.accessibility.AccessibilityWindowInfo window=root.getWindow();
+            check(window!=null,"immersive-tutorial-window-missing");
+            try {check("ImmersiveModeConfirmation".contentEquals(window.getTitle()==null?"":window.getTitle()),
+                "immersive-tutorial-window-changed");}
+            finally {window.recycle();}
             java.util.List<android.view.accessibility.AccessibilityNodeInfo> buttons=root.findAccessibilityNodeInfosByViewId("android:id/ok");
             boolean clicked=false;
             for(android.view.accessibility.AccessibilityNodeInfo button:buttons) {

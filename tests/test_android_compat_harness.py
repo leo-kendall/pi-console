@@ -70,6 +70,20 @@ class CompatibilityHarnessTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('--run', result.stderr)
 
+    def test_gesture_diagnostics_keep_state_without_systemui_content(self):
+        runner = self.runner()
+        raw = ('PRIVATE_HEADER https://private.invalid/\nEdgeBackGestureHandler:\n'
+               ' mIsEnabled=true\n mIsBackGestureAllowed=false\n mIsButtonForcedVisible=true\n'
+               ' mEdgeWidthLeft=45\n mPackageName=PRIVATE_APP\n mRecentGesture=PRIVATE_INPUT\n')
+        result = runner.summarize_gesture_handler(raw)
+        self.assertTrue(result['handler_dump_found'])
+        self.assertFalse(result['mIsBackGestureAllowed'])
+        self.assertTrue(result['mIsButtonForcedVisible'])
+        self.assertEqual(result['mEdgeWidthLeft'], 45)
+        self.assertNotIn('PRIVATE', json.dumps(result))
+        self.assertNotIn('https:', json.dumps(result))
+        self.assertEqual(runner.summarize_gesture_handler('unavailable'), {'handler_dump_found': False})
+
     def test_full_ui_requirement_rejects_recovery_only_result(self):
         runner = self.runner()
         report = {'passed': True, 'result_kind': 'requires-webview-update',

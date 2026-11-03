@@ -69,6 +69,28 @@ def summarize_process_crash(crash, exit_info):
     }
 
 
+def summarize_gesture_handler(raw):
+    # Retain only fixed state names and Boolean/numeric values, never window
+    # titles, activity names, recent input payloads or the raw SystemUI dump.
+    start = raw.find('EdgeBackGestureHandler:')
+    result = {'handler_dump_found': start >= 0}
+    if start < 0:
+        return result
+    section = raw[start:start + 5000]
+    for key in ('mIsEnabled', 'mIsAttached', 'mIsBackGestureAllowed', 'mIsGesturalModeEnabled',
+                'mIsNavBarShownTransiently', 'mGestureBlockingActivityRunning', 'mAllowGesture',
+                'mDisabledForQuickstep', 'mInRejectedExclusion', 'mIsInPip', 'mUsingThreeButtonNav',
+                'mIsButtonForcedVisible', 'mInGestureNavMode', 'mIsGestureHandlingEnabled'):
+        value = re.search(r'\b' + key + r'=\s*(true|false)\b', section)
+        if value:
+            result[key] = value.group(1) == 'true'
+    for key in ('mEdgeWidthLeft', 'mEdgeWidthRight', 'mLeftInset', 'mRightInset', 'mLongPressTimeout'):
+        value = re.search(r'\b' + key + r'=\s*(\d{1,6})\b', section)
+        if value:
+            result[key] = int(value.group(1))
+    return result
+
+
 def require_emulator(qemu):
     if qemu.strip() != '1':
         raise ValueError('Refusing app installation/data clearing on a non-emulator device')
@@ -106,6 +128,7 @@ def main():
     output = ''
     display_evidence = {'requested_display_size': expected_size}
     restore_tutorial = None
+    restore_user_setup = None
 
     def device(*command, timeout=60):
         return subprocess.run([adb, '-s', args.serial, *command], check=True, text=True,
@@ -149,6 +172,17 @@ def main():
             display_evidence['navigation_mode'] = mode
             if mode != '2':
                 raise ValueError('System gesture navigation is not active')
+            # SystemUI blocks edge Back until device setup is complete, even
+            # when the gestural navigation overlay reports mode 2.
+            previous_setup = device('shell', 'settings', 'get', 'secure', 'user_setup_complete').strip()
+            if previous_setup not in ('null', '0', '1'):
+                raise ValueError('Invalid emulator user setup state')
+            restore_user_setup = previous_setup
+            display_evidence['user_setup_complete_before_gesture'] = int(previous_setup) if previous_setup != 'null' else None
+            device('shell', 'settings', 'put', 'secure', 'user_setup_complete', '1')
+            if device('shell', 'settings', 'get', 'secure', 'user_setup_complete').strip() != '1':
+                raise ValueError('Emulator device setup did not complete')
+            display_evidence['user_setup_complete_for_gesture'] = True
             instrument += ['-e', 'gestureBack', 'true']
         instrument += ['dev.piconsole.compat/dev.piconsole.compat.CompatInstrumentation']
         output = device(*instrument, timeout=240)
@@ -178,6 +212,18 @@ def main():
                     failure_report = decoded
             except ValueError:
                 pass
+        if args.gesture_back and restore_tutorial is not None:
+            gesture = {}
+            try:
+                raw = device('shell', 'dumpsys', 'activity', 'service', 'com.android.systemui/.SystemUIService', timeout=20)
+                gesture.update(summarize_gesture_handler(raw))
+                for namespace, key in [('secure', 'user_setup_complete'), ('global', 'device_provisioned'),
+                                       ('secure', 'navigation_mode'), ('secure', 'touch_exploration_enabled')]:
+                    value = device('shell', 'settings', 'get', namespace, key).strip()
+                    gesture[key] = int(value) if value in ('0', '1', '2') else None
+            except (OSError, subprocess.SubprocessError):
+                gesture['diagnostic_unavailable'] = True
+            failure_report['system_gesture_state'] = gesture
         if 'Process crashed' in output:
             # This runs only after the emulator guard and fresh app-data reset.
             # The raw buffers stay in memory and are discarded after parsing.
@@ -195,27 +241,36 @@ def main():
         (output_dir / 'report.json').write_text(json.dumps(failure_report, indent=2) + '\n')
         raise SystemExit('Android compatibility failed: ' + str(error)) from None
     finally:
-        if restore_tutorial is not None:
+        restoration = {}
+        failed_restoration = []
+        for key, previous, field in (
+                ('user_setup_complete', restore_user_setup, 'user_setup_setting_restored'),
+                ('immersive_mode_confirmations', restore_tutorial, 'immersive_tutorial_setting_restored')):
+            if previous is None:
+                continue
             restored = False
             try:
-                if restore_tutorial == 'null':
-                    device('shell', 'settings', 'delete', 'secure', 'immersive_mode_confirmations')
+                if previous == 'null':
+                    device('shell', 'settings', 'delete', 'secure', key)
                 else:
                     # adb shell joins arguments into a command: preserve empty
                     # and customized values with actual shell quoting.
-                    device('shell', 'settings', 'put', 'secure', 'immersive_mode_confirmations', shlex.quote(restore_tutorial))
-                restored = device('shell', 'settings', 'get', 'secure', 'immersive_mode_confirmations').rstrip('\r\n') == restore_tutorial
+                    device('shell', 'settings', 'put', 'secure', key, shlex.quote(previous))
+                restored = device('shell', 'settings', 'get', 'secure', key).rstrip('\r\n') == previous
             except (OSError, subprocess.SubprocessError):
                 pass
-            report_path = output_dir / 'report.json'
-            if report_path.is_file():
-                final_report = json.loads(report_path.read_text())
-                final_report['immersive_tutorial_setting_restored'] = restored
-                if not restored:
-                    final_report.update(passed=False, runner_failure='Emulator immersive confirmation was not restored')
-                report_path.write_text(json.dumps(final_report, indent=2) + '\n')
+            restoration[field] = restored
             if not restored:
-                raise SystemExit('Could not restore emulator immersive confirmation')
+                failed_restoration.append(key)
+        report_path = output_dir / 'report.json'
+        if restoration and report_path.is_file():
+            final_report = json.loads(report_path.read_text())
+            final_report.update(restoration)
+            if failed_restoration:
+                final_report.update(passed=False, runner_failure='Emulator test settings were not restored')
+            report_path.write_text(json.dumps(final_report, indent=2) + '\n')
+        if failed_restoration:
+            raise SystemExit('Could not restore emulator test settings')
 
 
 if __name__ == '__main__':

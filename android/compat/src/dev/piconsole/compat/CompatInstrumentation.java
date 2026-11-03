@@ -203,6 +203,14 @@ public final class CompatInstrumentation extends Instrumentation {
             boolean keepScreen = (activity.getWindow().getAttributes().flags
                 & WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0;
             check(keepScreen == fullscreen, "native-fullscreen-state");
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.view.WindowInsetsController controller=activity.getWindow().getInsetsController();
+                check(controller!=null,"native-insets-controller-missing");
+                int behavior=controller.getSystemBarsBehavior();
+                result.put("systemBarsBehavior",behavior);
+                if(fullscreen) check(behavior==android.view.WindowInsetsController.BEHAVIOR_DEFAULT,
+                    "fullscreen-blocks-system-back-gestures");
+            }
             WindowInsets insets = decor.getRootWindowInsets();
             result.put("web", numbers(web.getWidth(), web.getHeight()));
             result.put("window", numbers(decor.getWidth(), decor.getHeight()));

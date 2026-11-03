@@ -74,12 +74,14 @@ class CompatibilityHarnessTests(unittest.TestCase):
         runner = self.runner()
         raw = ('PRIVATE_HEADER https://private.invalid/\nEdgeBackGestureHandler:\n'
                ' mIsEnabled=true\n mIsBackGestureAllowed=false\n mIsButtonForcedVisible=true\n'
-               ' mEdgeWidthLeft=45\n mPackageName=PRIVATE_APP\n mRecentGesture=PRIVATE_INPUT\n')
+               ' mEdgeWidthLeft=45\n mPackageName=PRIVATE_APP\n mRecentGesture=PRIVATE_INPUT\n'
+               ' mGestureLogInsideInsets=Gesture [123 [00:00],alw=FALSE, left=TRUE,disbld=TRUE,excl=PRIVATE_EXCLUSION]\n')
         result = runner.summarize_gesture_handler(raw)
         self.assertTrue(result['handler_dump_found'])
         self.assertFalse(result['mIsBackGestureAllowed'])
         self.assertTrue(result['mIsButtonForcedVisible'])
         self.assertEqual(result['mEdgeWidthLeft'], 45)
+        self.assertEqual(result['gesture_down_events'], [{'alw': False, 'left': True, 'disbld': True}])
         self.assertNotIn('PRIVATE', json.dumps(result))
         self.assertNotIn('https:', json.dumps(result))
         self.assertEqual(runner.summarize_gesture_handler('unavailable'), {'handler_dump_found': False})

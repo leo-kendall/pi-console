@@ -88,6 +88,16 @@ def summarize_gesture_handler(raw):
         value = re.search(r'\b' + key + r'=\s*(\d{1,6})\b', section)
         if value:
             result[key] = int(value.group(1))
+    events = []
+    for line in re.findall(r'Gesture \[[^\r\n]{0,1500}', section)[-6:]:
+        event = {}
+        for key in ('alw', 'left', 'backAlw', 'disbld', 'qsDisbld', 'blkdAct', 'pip'):
+            value = re.search(r'\b' + key + r'=\s*(true|false)\b', line, re.I)
+            if value:
+                event[key] = value.group(1).lower() == 'true'
+        if event:
+            events.append(event)
+    result['gesture_down_events'] = events
     return result
 
 

@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.piconsole"
-    android:versionCode="29" android:versionName="0.6.0-beta.8">
+    android:versionCode="30" android:versionName="0.6.0-beta.9">
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

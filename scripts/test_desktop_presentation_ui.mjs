@@ -43,7 +43,7 @@ try{
  await call('browsingContext.setViewport',{context,viewport:{width:818,height:392},devicePixelRatio:2.75});
  await evaluate("setDeviceLandscape(true);incoming=coloredFrame(2250,1080);void 0");await waitFor('desktopClient.getDisplay().getWidth()===2250');await delay(250);
  await checkBounds();await checkPixels();
- await evaluate("$('toast').hidden=true;$('desk-controls').click();void 0");await saveScreenshot('desktop-landscape-controls');await evaluate("$('desk-controls').click();void 0");
+ await evaluate("$('toast').hidden=true;appBack();void 0");await saveScreenshot('desktop-landscape-controls');await evaluate("$('desk-controls').click();void 0");
  // Keep a real cursor layer/hotspot and test its displayed position under layout zoom.
  await evaluate("(()=>{const d=desktopClient.getDisplay(),layer=d.getCursorLayer();layer.resize(16,16);d.cursorHotspotX=3;d.cursorHotspotY=4;d.showCursor(true);d.moveCursor(2000,900);})();void 0");
  assert.equal(await evaluate("(()=>{const d=desktopClient.getDisplay(),b=d.getElement().getBoundingClientRect(),c=d.getCursorLayer().getElement().getBoundingClientRect();return Math.abs(c.left-b.left-(2000-3)*d.getScale())<1&&Math.abs(c.top-b.top-(900-4)*d.getScale())<1;})()"),true,'Cursor retains remote coordinates and hotspot after resize');

@@ -10,6 +10,7 @@ function setDesktopInputTarget(remote){
  if(!desktopClient)return;
  releaseDesktopInput();desktopInputRemote=Boolean(remote);
  const button=$('desk-input-target');button.textContent=desktopInputRemote?'键鼠：远程':'键鼠：手机';button.setAttribute('aria-pressed',String(desktopInputRemote));
+ if(!desktopInputRemote&&fullscreenDesktop)showDesktopControls(true);
  if(desktopKeyboard){desktopKeyboard.onkeydown=desktopInputRemote?desktopBrowserKeyDown:null;desktopKeyboard.onkeyup=desktopInputRemote?desktopBrowserKeyUp:null;}
  setNativeDesktopInput(true);
  if(desktopInputRemote&&!desktopEditorFocused())desktopClient.getDisplay().getElement().focus({preventScroll:true});
@@ -114,12 +115,28 @@ function scheduleDesktopResize(){
  const generation=desktopGeneration;
  resizeDesktopTimer=setTimeout(()=>{if(generation===desktopGeneration)resizeRemoteDesktop();},350);
 }
-function showDesktopControls(show){document.body.classList.toggle('desktop-controls-open',show);$('desk-controls').setAttribute('aria-expanded',String(show));$('desk-controls').textContent=show?'收起':'控件';updateNativeDesktopRegion();}
+function showDesktopControls(show){
+ const expanded=Boolean(fullscreenDesktop&&show),button=$('desk-controls');
+ document.body.classList.toggle('desktop-controls-open',expanded);button.hidden=!expanded;
+ button.setAttribute('aria-expanded',String(expanded));button.setAttribute('aria-label',expanded?'收起桌面控件':'展开桌面控件');button.textContent=expanded?'收起':'控件';
+ if(!show){
+  const editing=!$('keyboard-box').hidden;$('desktop-text').blur();$('keyboard-box').hidden=true;
+  if(fullscreenDesktop&&desktopClient&&desktopInputRemote&&!desktopEditorFocused())desktopClient.getDisplay().getElement().focus({preventScroll:true});
+  if(editing){setNativeDesktopInput(true);scheduleDesktopResize();}
+ }
+ updateNativeDesktopRegion();
+}
+window.handleDesktopBack=function(){
+ if(!fullscreenDesktop||!desktopClient)return false;
+ if(!$('keyboard-box').hidden){$('desktop-text').blur();$('keyboard-box').hidden=true;setNativeDesktopInput(true);scheduleDesktopResize();return true;}
+ if(!document.body.classList.contains('desktop-controls-open')){showDesktopControls(true);return true;}
+ return exitDesktopFullscreen();
+};
 function setDesktopFullscreen(enabled){
  if(fullscreenDesktop===enabled)return;
  fullscreenDesktop=enabled;document.body.classList.toggle('desktop-fullscreen',enabled);
  if(enabled)zoomed=false;
- $('desk-controls').hidden=!enabled;$('desk-fullscreen').textContent=enabled?'退出全屏':'全屏';
+ $('desk-fullscreen').textContent=enabled?'退出全屏':'全屏';
  showDesktopControls(false);local('desktopFullscreen',String(enabled)).catch(()=>{});
  requestAnimationFrame(()=>{fitDesktop();scheduleDesktopResize();});
 }
@@ -158,7 +175,7 @@ window.setDeviceLandscape=function(landscape){if(deviceLandscape!==landscape){de
 matchMedia('(orientation: landscape)').addEventListener('change',()=>{if(deviceLandscape!==null)return;manualFullscreen=false;fullscreenDismissed=false;zoomed=false;syncDesktopLayout();scheduleDesktopResize();});
 window.exitDesktopFullscreen=function(){if(!fullscreenDesktop)return false;manualFullscreen=false;fullscreenDismissed=true;setDesktopFullscreen(false);return true;};
 $('desk-fullscreen').onclick=()=>{if(fullscreenDesktop)exitDesktopFullscreen();else{manualFullscreen=true;fullscreenDismissed=false;syncDesktopLayout();}};
-$('desk-controls').onclick=()=>{const show=!document.body.classList.contains('desktop-controls-open');showDesktopControls(show);if(!show){$('desktop-text').blur();$('keyboard-box').hidden=true;}};
+$('desk-controls').onclick=()=>showDesktopControls(!document.body.classList.contains('desktop-controls-open'));
 $('desktop-connect').onclick=async()=>{if(desktopConnecting)return;if(!paired){toast('请先在设置中输入配对码');navigate('settings');return;}desktopConnecting=true;$('desktop-connect').disabled=true;$('desktop-connect').textContent='正在连接…';const generation=++desktopGeneration;try{
  if(typeof Guacamole==='undefined')throw new Error('桌面组件未加载');
  desktopTrace=new DesktopTrace();desktopTrace.event('render-mode',{mode:desktopRenderMode});
@@ -253,7 +270,7 @@ $('desk-inspect').onclick=async()=>{
   if(generation!==desktopGeneration)return;
   const after=await desktopSample(client);
   if(generation!==desktopGeneration)return;
-  const report={version:'0.6.0-beta.8',build:29,mode:desktopRenderMode,cursorPositioning:'layout',sampling:{controlsHidden:true,mayTriggerRepaint:true,automaticEdgeCapture:true},edges:desktopEdgeProbe?.snapshot()||[],before,after,trace:desktopTrace.snapshot()};
+  const report={version:'0.6.0-beta.9',build:30,mode:desktopRenderMode,cursorPositioning:'layout',sampling:{controlsHidden:true,mayTriggerRepaint:true,automaticEdgeCapture:true},edges:desktopEdgeProbe?.snapshot()||[],before,after,trace:desktopTrace.snapshot()};
   try{localStorage.setItem('desktop-last-report',JSON.stringify(report));}catch(e){}
   showDesktopReport(report);
  }catch(e){toast('画面仍在调整，请稍后再检查');}finally{document.body.classList.remove('desktop-sampling');button.disabled=false;}

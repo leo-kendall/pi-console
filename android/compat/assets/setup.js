@@ -19,8 +19,10 @@ window.__compatColor = (w, h) => {
 window.__compatIncoming = '';
 window.__compatOpened = null;
 window.__compatSizes = [];
+window.__compatKeyEvents = 0;
 const compatWrites = new Guacamole.Parser();
 compatWrites.oninstruction = (opcode, args) => {
+    if (opcode === 'key') { window.__compatKeyEvents++; return; }
     if (opcode !== 'size') return;
     const width = Number(args[0]), height = Number(args[1]);
     if (args.length !== 2 || !Number.isInteger(width) || !Number.isInteger(height)

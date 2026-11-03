@@ -25,7 +25,19 @@ try{
  assert.equal(await evaluate("$('desktop-status').textContent.includes('VNC')"),true,'Configured protocol shown from backend response');
  await call('browsingContext.setViewport',{context,viewport:{width:818,height:392},devicePixelRatio:1});
  await evaluate('setDeviceLandscape(true);void 0');await waitFor("document.body.classList.contains('desktop-fullscreen')");await delay(100);
- await evaluate("$('desk-controls').click();void 0");await delay(40);
+ assert.equal(await evaluate("$('desk-controls').hidden&&$('desk-controls').getClientRects().length===0"),true,'Fullscreen starts without a floating control button');
+ await evaluate("window.controlSession=desktopClient;window.controlBounds=JSON.stringify((()=>{const r=$('screen').getBoundingClientRect();return [r.x,r.y,r.width,r.height];})());appBack();void 0");
+ assert.equal(await evaluate("fullscreenDesktop&&document.body.classList.contains('desktop-controls-open')&&!$('desk-controls').hidden&&desktopClient===controlSession"),true,'Back reveals controls without leaving fullscreen or reconnecting');
+ await evaluate("$('desk-display').click();void 0");await waitFor("$('sheet').open");
+ await evaluate("appBack();void 0");assert.equal(await evaluate("!$('sheet').open&&fullscreenDesktop&&document.body.classList.contains('desktop-controls-open')"),true,'Back closes a modal before changing fullscreen controls');
+ await evaluate("$('desk-keyboard').click();void 0");
+ await evaluate("appBack();void 0");assert.equal(await evaluate("$('keyboard-box').hidden&&fullscreenDesktop&&document.body.classList.contains('desktop-controls-open')"),true,'Back closes the input panel first');
+ await evaluate("$('desk-controls').focus();$('desk-controls').click();void 0");
+ assert.equal(await evaluate("document.activeElement===desktopClient.getDisplay().getElement()"),true,'Collapsing controls returns browser keyboard focus to the remote display');
+ assert.equal(await evaluate("$('desk-controls').getClientRects().length===0&&!document.body.classList.contains('desktop-controls-open')"),true,'Collapse removes the button and panel entirely');
+ assert.equal(await evaluate("JSON.stringify((()=>{const r=$('screen').getBoundingClientRect();return [r.x,r.y,r.width,r.height];})())===controlBounds"),true,'Showing and hiding overlays never changes the desktop frame');
+ await evaluate("appBack();appBack();void 0");assert.equal(await evaluate("!fullscreenDesktop&&desktopClient===controlSession&&page==='desktop'"),true,'A second Back exits fullscreen while retaining the connection');
+ await evaluate("$('desk-fullscreen').click();appBack();void 0");await delay(40);
  for(let i=0;i<2;i++){
   assert.equal(await evaluate("(()=>{const target=getComputedStyle($('desk-input-target')),other=getComputedStyle($('desk-fit'));return target.backgroundColor===other.backgroundColor&&target.color===other.color;})()"),true,'Both keyboard target states use the same colors as adjacent controls');
   await evaluate("$('desk-input-target').click();void 0");
@@ -45,10 +57,10 @@ try{
  assert.equal(await evaluate("$('desk-input-target').closest('.desktop-primary')!==null"),true,'Target toggle belongs inside the controls toolbar');
  await evaluate("$('desk-controls').click();updateNativeDesktopRegion();void 0");
  assert.equal(await evaluate("$('desk-input-target').getClientRects().length"),0,'Target toggle does not cover desktop when controls are collapsed');
- assert.equal(await evaluate("(()=>{const color=getComputedStyle($('desk-controls')).backgroundColor;return Number(color.match(/rgba\\([^,]+,[^,]+,[^,]+,\\s*([.0-9]+)\\)/)?.[1])<=.4;})()"),true,'Collapsed Controls background is mostly transparent');
- assert.equal(await evaluate("(()=>{const r=inputRegions.at(-1),b=$('desk-controls').getBoundingClientRect(),x=(b.x+b.width/2)/innerWidth,y=(b.y+b.height/2)/innerHeight;return r.exclude?.some(e=>x>=e.left&&x<e.right&&y>=e.top&&y<e.bottom);})()"),true,'Native region excludes collapsed Controls from remote mouse capture');
+ assert.equal(await evaluate("$('desk-controls').getClientRects().length"),0,'No collapsed button covers the desktop');
+ assert.equal(await evaluate("inputRegions.at(-1).exclude.length"),0,'Hidden controls leave no invisible native mouse exclusion');
  await evaluate("desktopClient.getDisplay().getElement().focus();desktopNativeInput({session:desktopId,type:'toggle-target'});void 0");
- assert.equal(await evaluate('document.activeElement.id'),'desk-controls','Phone target focuses visible Controls rather than a hidden button');
+ assert.equal(await evaluate('document.activeElement.id'),'desk-controls','Phone target reveals controls and focuses a visible button');
  await evaluate("desktopNativeInput({session:desktopId,type:'toggle-target'});void 0");
  await call('browsingContext.setViewport',{context,viewport:{width:1024,height:768},devicePixelRatio:1});
  await evaluate('setDeviceLandscape(false);void 0');await delay(60);

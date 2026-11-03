@@ -20,6 +20,8 @@ Pi Console 把 Android 手机变成自己 Linux 主机的随身控制台。一�
 
 远程桌面提供自动尺寸、固定像素预设、自定义尺寸和 16:9、16:10、4:3、3:2、21:9 等比例选择。连接中也能应用显示设置，画面等比显示；远端是否能改变分辨率由桌面服务决定。手机旋转时，固定尺寸保持原请求，自动尺寸按可用区域计算。
 
+全屏默认隐藏全部控件，包括悬浮按钮。按手机返回键或系统返回手势展开；点“收起”再次全部隐藏，控件展开时再按返回则退出全屏。双指滚动和远程点击不用于呼出控件。
+
 触控可用于移动、点击和拖动。物理键盘支持常用组合键、方向键和 F1–F12；控件提供 Ctrl/Alt/Shift/Super 锁定键。App 在前台且桌面活动时，**Ctrl+Alt+空格**可切换键鼠控制手机或远程桌面，也可用界面按钮切换。软键盘通过文字输入框发送。纯文本剪贴板按按钮传输，不会持续读取手机剪贴板。
 
 它适合已联网、桌面服务可用后的日常 GUI 工作。它不是 HDMI 采集卡，无法显示 BIOS/固件或 RDP/VNC 启动之前的开机画面；初次装系统和网络救援仍需要备用管理通道。远程桌面可能是独立会话，也可能共享当前桌面，取决于主机服务。画面延迟、文本清晰度和交互体验受网络、手机 GPU/WebView 及服务器负载影响，不能承诺替代所有本地显示器场景。
@@ -44,6 +46,6 @@ Pi Console 把 Android 手机变成自己 Linux 主机的随身控制台。一�
 
 Pi Console turns an idle Android phone into a personal Linux console. With a configured graphical session and compatible local RDP or classic VNC server, the phone can act as a daily remote screen, touchpad, and keyboard/mouse gateway for a Raspberry Pi or another Linux host, reducing the need for a separate monitor for routine GUI work.
 
-One app brings together host monitoring, authorized service/container control, logs, files, web app shortcuts, and remote desktop. Desktop resolution and aspect ratio can be adjusted before or during a session, subject to server support. While the app is in the foreground with an active desktop, Ctrl+Alt+Space switches physical keyboard/mouse control between the phone and remote desktop.
+One app brings together host monitoring, authorized service/container control, logs, files, web app shortcuts, and remote desktop. Desktop resolution and aspect ratio can be adjusted before or during a session, subject to server support. Fullscreen hides all controls. Android Back reveals them, Collapse hides them, and Back while controls are open exits fullscreen. While the app is in the foreground with an active desktop, Ctrl+Alt+Space switches physical keyboard/mouse control between the phone and remote desktop.
 
 The app targets Android 8.0+ with a capable, updated WebView; this is a capability requirement, not blanket certification of any phone brand. HTTPS with a system-trusted certificate is required over public networks, LAN, or VPN. Desktop is not HDMI capture and cannot show firmware or early boot. Keep SSH or another recovery path. See the [deployment guide](deployment.md), [desktop compatibility](desktop-compatibility.md), and [license/icon notice](commercial-use.md).

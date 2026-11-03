@@ -23,7 +23,7 @@ try{
  navigate('desktop');setDeviceLandscape(true);$('desktop-connect').click();void 0`);
  await waitFor('desktopClient?.getDisplay().getWidth()>0');
  assert.equal(await evaluate("Boolean($('desk-display'))"),true,'Connected session exposes display settings without disconnecting');
- async function settings(){await evaluate("if(fullscreenDesktop&&!document.body.classList.contains('desktop-controls-open'))$('desk-controls').click();$('desk-display').click();void 0");await waitFor("$('sheet').open&&Boolean($('desktop-size-choice'))");}
+ async function settings(){await evaluate("if(fullscreenDesktop&&!document.body.classList.contains('desktop-controls-open'))appBack();$('desk-display').click();void 0");await waitFor("$('sheet').open&&Boolean($('desktop-size-choice'))");}
  async function choose(value){await evaluate(`$('desktop-size-choice').value=${JSON.stringify(value)};$('desktop-size-choice').dispatchEvent(new Event('change'));void 0`);}
  async function apply(){await evaluate("$('desktop-display-apply').click();void 0");await waitFor("!$('sheet').open");}
  await settings();

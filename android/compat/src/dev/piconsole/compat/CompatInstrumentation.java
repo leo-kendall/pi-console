@@ -329,6 +329,8 @@ public final class CompatInstrumentation extends Instrumentation {
         for (String key : new String[]{"fit", "centered", "contentAligned", "cursorAligned"})
             check(geometry.getBoolean(key), name + "-" + key);
         check(geometry.getBoolean("fullscreen") == fullscreen, name + "-fullscreen");
+        if (fullscreen) check(Boolean.TRUE.equals(js("$('desk-controls').hidden&&!document.body.classList.contains('desktop-controls-open')")),
+            "fullscreen-has-visible-controls");
         check(geometry.getInt("errors") == 0 && consoleErrors.get() == 0, "javascript-errors");
         result.put("native", nativeGeometry(fullscreen));
         js("(()=>{desktopClient.getDisplay().showCursor(false);return true;})()");
@@ -348,6 +350,45 @@ public final class CompatInstrumentation extends Instrumentation {
         js("(()=>{$('desktop-size-choice').value=" + JSONObject.quote(value)
             + ";$('desktop-size-choice').dispatchEvent(new Event('change'));$('desktop-display-apply').click();return true;})()");
         waitJs("!$('sheet').open&&$('resolution').value===" + JSONObject.quote(value), "fixed-resolution-setting");
+    }
+
+    private void waitNativeFullscreen(boolean expected) throws Exception {
+        long deadline = SystemClock.uptimeMillis() + 10000;
+        while (SystemClock.uptimeMillis() < deadline) {
+            AtomicInteger matched = new AtomicInteger();
+            main(() -> matched.set(((activity.getWindow().getAttributes().flags
+                & WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0) == expected ? 1 : 0));
+            if (matched.get() == 1) return;
+            Thread.sleep(50);
+        }
+        throw new AssertionError("native-fullscreen-transition-timeout");
+    }
+
+    private void controlsBackFlow() throws Exception {
+        waitJs("fullscreenDesktop&&$('desk-controls').hidden", "fullscreen-controls-not-hidden");
+        js("(()=>{window.__backClient=desktopClient;window.__backKeyCount=__compatKeyEvents;return true;})()");
+        sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+        waitJs("fullscreenDesktop&&!$('desk-controls').hidden&&document.body.classList.contains('desktop-controls-open')",
+            "native-back-must-show-controls");
+        js("(()=>{$('desk-display').click();return true;})()");
+        waitJs("$('sheet').open", "native-back-modal-setup");
+        sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+        waitJs("!$('sheet').open&&fullscreenDesktop&&document.body.classList.contains('desktop-controls-open')",
+            "native-back-must-close-modal-first");
+        js("(()=>{$('desk-controls').click();return true;})()");
+        waitJs("fullscreenDesktop&&$('desk-controls').hidden&&$('desk-controls').getClientRects().length===0",
+            "collapse-must-remove-control-hit-area");
+        sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+        waitJs("document.body.classList.contains('desktop-controls-open')", "native-back-must-reopen-controls");
+        sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+        waitJs("!fullscreenDesktop&&desktopClient===window.__backClient", "second-native-back-must-exit-fullscreen-only");
+        waitNativeFullscreen(false);
+        nativeGeometry(false);
+        Thread.sleep(100);
+        check(Boolean.TRUE.equals(js("__compatKeyEvents===window.__backKeyCount")), "system-back-forwarded-to-remote");
+        report.put("controlsBackNavigation", true).put("systemBackForwarded", false);
+        js("(()=>{$('desk-fullscreen').click();return true;})()");
+        waitJs("fullscreenDesktop&&$('desk-controls').hidden", "fullscreen-reentry-must-hide-controls");
     }
 
     private void rotate(int requested, int configuration, boolean landscape) throws Exception {
@@ -417,6 +458,7 @@ public final class CompatInstrumentation extends Instrumentation {
             scenario("portrait-2560", false);
             js("(()=>{$('desk-fullscreen').click();return true;})()");
             scenario("fullscreen-portrait-2560", true);
+            controlsBackFlow();
             rotate(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE, Configuration.ORIENTATION_LANDSCAPE, true);
             scenario("fullscreen-landscape-2560", true);
             rotate(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, Configuration.ORIENTATION_PORTRAIT, false);

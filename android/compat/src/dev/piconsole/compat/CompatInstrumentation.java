@@ -366,19 +366,43 @@ public final class CompatInstrumentation extends Instrumentation {
         throw new AssertionError("native-fullscreen-transition-timeout");
     }
 
+    private void waitInputFocus() throws Exception {
+        long deadline = SystemClock.uptimeMillis() + 10000;
+        while (SystemClock.uptimeMillis() < deadline) {
+            AtomicInteger focus = new AtomicInteger();
+            main(() -> {
+                report.put("backWindowFocused", activity.hasWindowFocus());
+                report.put("backDisplayState", activity.getWindow().getDecorView().getDisplay().getState());
+                android.app.KeyguardManager keyguard=(android.app.KeyguardManager)activity.getSystemService(android.content.Context.KEYGUARD_SERVICE);
+                report.put("backKeyguardLocked", keyguard!=null&&keyguard.isKeyguardLocked());
+                if(activity.hasWindowFocus()) focus.set(1);
+            });
+            if(focus.get()==1) return;
+            Thread.sleep(100);
+        }
+        throw new AssertionError("back-input-target-window-not-focused");
+    }
+
     private void pressSystemBack() throws Exception {
-        if (!gestureBack) { sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK); return; }
+        waitInputFocus();
+        if (!gestureBack) { sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK); recordBackState(); return; }
         AtomicInteger width = new AtomicInteger(), height = new AtomicInteger();
         main(() -> {width.set(activity.getWindow().getDecorView().getWidth());height.set(activity.getWindow().getDecorView().getHeight());});
         String command = "input swipe 1 " + height.get()/2 + " " + width.get()/3 + " " + height.get()/2 + " 350";
         try (InputStream stream = new android.os.ParcelFileDescriptor.AutoCloseInputStream(getUiAutomation().executeShellCommand(command))) {
             byte[] buffer = new byte[128]; while (stream.read(buffer) != -1) { }
         }
+        recordBackState();
+    }
+
+    private void recordBackState() throws Exception {
+        Thread.sleep(250);
+        report.put("backState", js("({calls:window.__backCalls,fullscreen:fullscreenDesktop,controlsOpen:document.body.classList.contains('desktop-controls-open'),buttonHidden:$('desk-controls').hidden,clientAlive:Boolean(desktopClient),sheetOpen:$('sheet').open})"));
     }
 
     private void controlsBackFlow() throws Exception {
         waitJs("fullscreenDesktop&&$('desk-controls').hidden", "fullscreen-controls-not-hidden");
-        js("(()=>{window.__backClient=desktopClient;window.__backKeyCount=__compatKeyEvents;return true;})()");
+        js("(()=>{window.__backClient=desktopClient;window.__backKeyCount=__compatKeyEvents;window.__backCalls=0;const original=window.appBack;window.appBack=()=>{window.__backCalls++;return original();};return true;})()");
         pressSystemBack();
         waitJs("fullscreenDesktop&&!$('desk-controls').hidden&&document.body.classList.contains('desktop-controls-open')",
             "native-back-must-show-controls");

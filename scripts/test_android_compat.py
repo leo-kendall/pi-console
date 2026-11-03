@@ -122,6 +122,11 @@ def main():
                 raise ValueError('Development APK install did not report success')
         if 'Success' not in device('shell', 'pm', 'clear', 'dev.piconsole'):
             raise ValueError('Could not reset emulator app data for offline first launch')
+        power = device('shell', 'dumpsys', 'power')
+        wake = re.search(r'mWakefulness=(Awake|Asleep|Dreaming|Dozing)\b', power)
+        display_evidence['wakefulness_before_launch'] = wake.group(1) if wake else 'unknown'
+        device('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
+        device('shell', 'wm', 'dismiss-keyguard')
         display_evidence['display_size_before_instrumentation'] = device('shell', 'wm', 'size').strip()
         print(json.dumps(display_evidence), flush=True)
         if expected_size and effective_display_size(display_evidence['display_size_before_instrumentation']) != expected_size:

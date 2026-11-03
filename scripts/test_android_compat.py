@@ -104,6 +104,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     output = ''
     display_evidence = {'requested_display_size': expected_size}
+    restore_tutorial = None
 
     def device(*command, timeout=60):
         return subprocess.run([adb, '-s', args.serial, *command], check=True, text=True,
@@ -127,6 +128,16 @@ def main():
         display_evidence['wakefulness_before_launch'] = wake.group(1) if wake else 'unknown'
         device('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
         device('shell', 'wm', 'dismiss-keyguard')
+        # Match AOSP CTS's immersive tests: finish the OS first-use tutorial
+        # before testing app input. A focused tutorial otherwise consumes Back.
+        previous = device('shell', 'settings', 'get', 'secure', 'immersive_mode_confirmations').strip()
+        if previous not in ('null', 'confirmed'):
+            raise ValueError('Unexpected emulator immersive confirmation setting')
+        restore_tutorial = previous
+        device('shell', 'settings', 'put', 'secure', 'immersive_mode_confirmations', 'confirmed')
+        if device('shell', 'settings', 'get', 'secure', 'immersive_mode_confirmations').strip() != 'confirmed':
+            raise ValueError('Could not prepare emulator immersive confirmation')
+        display_evidence['immersive_tutorial_preconfirmed'] = True
         display_evidence['display_size_before_instrumentation'] = device('shell', 'wm', 'size').strip()
         print(json.dumps(display_evidence), flush=True)
         if expected_size and effective_display_size(display_evidence['display_size_before_instrumentation']) != expected_size:
@@ -182,6 +193,26 @@ def main():
         failure_report.update({'passed': False, 'label': args.label, 'runner_failure': str(error)[:1000]})
         (output_dir / 'report.json').write_text(json.dumps(failure_report, indent=2) + '\n')
         raise SystemExit('Android compatibility failed: ' + str(error)) from None
+    finally:
+        if restore_tutorial is not None:
+            restored = False
+            try:
+                if restore_tutorial == 'null':
+                    device('shell', 'settings', 'delete', 'secure', 'immersive_mode_confirmations')
+                else:
+                    device('shell', 'settings', 'put', 'secure', 'immersive_mode_confirmations', 'confirmed')
+                restored = device('shell', 'settings', 'get', 'secure', 'immersive_mode_confirmations').strip() == restore_tutorial
+            except (OSError, subprocess.SubprocessError):
+                pass
+            report_path = output_dir / 'report.json'
+            if report_path.is_file():
+                final_report = json.loads(report_path.read_text())
+                final_report['immersive_tutorial_setting_restored'] = restored
+                if not restored:
+                    final_report.update(passed=False, runner_failure='Emulator immersive confirmation was not restored')
+                report_path.write_text(json.dumps(final_report, indent=2) + '\n')
+            if not restored:
+                raise SystemExit('Could not restore emulator immersive confirmation')
 
 
 if __name__ == '__main__':

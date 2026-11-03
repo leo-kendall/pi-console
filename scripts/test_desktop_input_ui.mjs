@@ -32,6 +32,7 @@ try{
  await evaluate("appBack();void 0");assert.equal(await evaluate("!$('sheet').open&&fullscreenDesktop&&document.body.classList.contains('desktop-controls-open')"),true,'Back closes a modal before changing fullscreen controls');
  await evaluate("$('desk-keyboard').click();void 0");
  await evaluate("appBack();void 0");assert.equal(await evaluate("$('keyboard-box').hidden&&fullscreenDesktop&&document.body.classList.contains('desktop-controls-open')"),true,'Back closes the input panel first');
+ assert.equal(await evaluate("document.activeElement===desktopClient.getDisplay().getElement()"),true,'Closing the input panel with Back restores remote browser keyboard focus');
  await evaluate("$('desk-controls').focus();$('desk-controls').click();void 0");
  assert.equal(await evaluate("document.activeElement===desktopClient.getDisplay().getElement()"),true,'Collapsing controls returns browser keyboard focus to the remote display');
  assert.equal(await evaluate("$('desk-controls').getClientRects().length===0&&!document.body.classList.contains('desktop-controls-open')"),true,'Collapse removes the button and panel entirely');
@@ -61,6 +62,8 @@ try{
  assert.equal(await evaluate("inputRegions.at(-1).exclude.length"),0,'Hidden controls leave no invisible native mouse exclusion');
  await evaluate("desktopClient.getDisplay().getElement().focus();desktopNativeInput({session:desktopId,type:'toggle-target'});void 0");
  assert.equal(await evaluate('document.activeElement.id'),'desk-controls','Phone target reveals controls and focuses a visible button');
+ await evaluate("$('desk-keyboard').click();appBack();void 0");
+ assert.equal(await evaluate("$('keyboard-box').hidden&&document.activeElement.id==='desk-controls'"),true,'Closing phone-target input keeps focus on visible phone controls');
  await evaluate("desktopNativeInput({session:desktopId,type:'toggle-target'});void 0");
  await call('browsingContext.setViewport',{context,viewport:{width:1024,height:768},devicePixelRatio:1});
  await evaluate('setDeviceLandscape(false);void 0');await delay(60);

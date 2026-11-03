@@ -128,7 +128,7 @@ function showDesktopControls(show){
 }
 window.handleDesktopBack=function(){
  if(!fullscreenDesktop||!desktopClient)return false;
- if(!$('keyboard-box').hidden){$('desktop-text').blur();$('keyboard-box').hidden=true;setNativeDesktopInput(true);scheduleDesktopResize();return true;}
+ if(!$('keyboard-box').hidden){$('desktop-text').blur();$('keyboard-box').hidden=true;(desktopInputRemote?desktopClient.getDisplay().getElement():$('desk-controls')).focus({preventScroll:true});setNativeDesktopInput(true);scheduleDesktopResize();return true;}
  if(!document.body.classList.contains('desktop-controls-open')){showDesktopControls(true);return true;}
  return exitDesktopFullscreen();
 };

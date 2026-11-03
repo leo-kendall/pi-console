@@ -390,7 +390,7 @@ public final class CompatInstrumentation extends Instrumentation {
         // Identify that exact focused window; never click another system dialog.
         String windows;
         try (InputStream stream = new android.os.ParcelFileDescriptor.AutoCloseInputStream(
-                getUiAutomation().executeShellCommand("dumpsys window windows"));
+                getUiAutomation().executeShellCommand("dumpsys window displays"));
              ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[4096]; int count;
             while((count=stream.read(buffer))!=-1) {
@@ -402,7 +402,8 @@ public final class CompatInstrumentation extends Instrumentation {
         String focused="";
         for(String line:windows.split("\n")) if(line.contains("mCurrentFocus=")) {focused=line;break;}
         boolean tutorial=focused.contains("ImmersiveModeConfirmation");
-        report.put("backFocusedWindowKind",tutorial?"immersive-tutorial":focused.contains("dev.piconsole/")?"app":"other");
+        report.put("backFocusedWindowKind",tutorial?"immersive-tutorial":focused.contains("dev.piconsole/")?"app"
+            :focused.isEmpty()?"unavailable":focused.contains("mCurrentFocus=null")?"none":"other");
         report.put("immersiveTutorialObserved",tutorial);
         if(!tutorial) return;
         android.accessibilityservice.AccessibilityServiceInfo info=getUiAutomation().getServiceInfo();

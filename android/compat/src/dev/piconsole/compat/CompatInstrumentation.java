@@ -368,6 +368,7 @@ public final class CompatInstrumentation extends Instrumentation {
 
     private void waitInputFocus() throws Exception {
         long deadline = SystemClock.uptimeMillis() + 10000;
+        boolean inspected = false;
         while (SystemClock.uptimeMillis() < deadline) {
             AtomicInteger focus = new AtomicInteger();
             main(() -> {
@@ -378,9 +379,47 @@ public final class CompatInstrumentation extends Instrumentation {
                 if(activity.hasWindowFocus()) focus.set(1);
             });
             if(focus.get()==1) return;
+            if(!inspected) { inspected=true; dismissSystemImmersiveTutorial(); }
             Thread.sleep(100);
         }
         throw new AssertionError("back-input-target-window-not-focused");
+    }
+
+    private void dismissSystemImmersiveTutorial() throws Exception {
+        // A fresh emulator can put Android's first-use tutorial above the app.
+        // Identify that exact focused window; never click another system dialog.
+        String windows;
+        try (InputStream stream = new android.os.ParcelFileDescriptor.AutoCloseInputStream(
+                getUiAutomation().executeShellCommand("dumpsys window windows"));
+             ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[4096]; int count;
+            while((count=stream.read(buffer))!=-1) {
+                check(bytes.size()+count<=2*1024*1024,"window-diagnostic-too-large");
+                bytes.write(buffer,0,count);
+            }
+            windows=bytes.toString("UTF-8");
+        }
+        String focused="";
+        for(String line:windows.split("\n")) if(line.contains("mCurrentFocus=")) {focused=line;break;}
+        boolean tutorial=focused.contains("ImmersiveModeConfirmation");
+        report.put("backFocusedWindowKind",tutorial?"immersive-tutorial":focused.contains("dev.piconsole/")?"app":"other");
+        report.put("immersiveTutorialObserved",tutorial);
+        if(!tutorial) return;
+        android.accessibilityservice.AccessibilityServiceInfo info=getUiAutomation().getServiceInfo();
+        info.flags|=android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS;
+        getUiAutomation().setServiceInfo(info);
+        android.view.accessibility.AccessibilityNodeInfo root=getUiAutomation().getRootInActiveWindow();
+        check(root!=null,"immersive-tutorial-root-missing");
+        try {
+            java.util.List<android.view.accessibility.AccessibilityNodeInfo> buttons=root.findAccessibilityNodeInfosByViewId("android:id/ok");
+            boolean clicked=false;
+            for(android.view.accessibility.AccessibilityNodeInfo button:buttons) {
+                try {if(button.isVisibleToUser()&&button.isClickable()) clicked|=button.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK);}
+                finally {button.recycle();}
+            }
+            report.put("immersiveTutorialDismissed",clicked);
+            check(clicked,"immersive-tutorial-confirmation-missing");
+        } finally {root.recycle();}
     }
 
     private void pressSystemBack() throws Exception {

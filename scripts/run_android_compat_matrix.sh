@@ -24,3 +24,15 @@ if [ "$compat_api" -ge 28 ]; then
     echo 'Cutout overlay unavailable in this system image; no cutout run claimed.'
   fi
 fi
+
+if [ "$compat_api" -eq 35 ]; then
+  adb -s emulator-5554 shell cmd overlay enable-exclusive --user 0 --category com.android.internal.systemui.navbar.gestural
+  trap 'adb -s emulator-5554 shell cmd overlay disable --user 0 com.android.internal.systemui.navbar.gestural' EXIT
+  for compat_wait in {1..40}; do
+    if [ "$(adb -s emulator-5554 shell settings get secure navigation_mode | tr -d '\r')" = 2 ]; then break; fi
+    sleep .25
+  done
+  python3 -B scripts/test_android_compat.py --run --serial emulator-5554 --display-size 1080x2400 --gesture-back --require-full-ui --label "api${compat_api}-gesture-back"
+  adb -s emulator-5554 shell cmd overlay disable --user 0 com.android.internal.systemui.navbar.gestural
+  trap - EXIT
+fi

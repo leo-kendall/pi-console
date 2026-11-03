@@ -87,6 +87,7 @@ def main():
     parser.add_argument('--require-full-ui', action='store_true',
                         help='Fail if an outdated WebView only exercises the native update recovery UI')
     parser.add_argument('--display-size', help='Required effective emulator size, for example 1080x2400')
+    parser.add_argument('--gesture-back', action='store_true', help='Require active system gesture navigation and test actual edge swipes')
     args = parser.parse_args()
     if args.display_size and not re.fullmatch(r'[1-9][0-9]{2,3}x[1-9][0-9]{2,3}', args.display_size):
         parser.error('Invalid --display-size')
@@ -125,10 +126,19 @@ def main():
         print(json.dumps(display_evidence), flush=True)
         if expected_size and effective_display_size(display_evidence['display_size_before_instrumentation']) != expected_size:
             raise ValueError('Window-manager size override did not take effect')
-        output = device('shell', 'am', 'instrument', '-w', '-r',
-                        'dev.piconsole.compat/dev.piconsole.compat.CompatInstrumentation', timeout=240)
+        instrument = ['shell', 'am', 'instrument', '-w', '-r']
+        if args.gesture_back:
+            mode = device('shell', 'settings', 'get', 'secure', 'navigation_mode').strip()
+            display_evidence['navigation_mode'] = mode
+            if mode != '2':
+                raise ValueError('System gesture navigation is not active')
+            instrument += ['-e', 'gestureBack', 'true']
+        instrument += ['dev.piconsole.compat/dev.piconsole.compat.CompatInstrumentation']
+        output = device(*instrument, timeout=240)
         (output_dir / 'instrumentation.log').write_text(output)
         report = parse_instrumentation(output, require_full_ui=args.require_full_ui)
+        if args.gesture_back and (not report.get('controlsBackNavigation') or report.get('backInput') != 'system-gesture'):
+            raise ValueError('Missing actual system-gesture Back coverage')
         report.update(display_evidence)
         if expected_size:
             verify_display_report(report, expected_size)

@@ -18,6 +18,7 @@ import java.util.concurrent.*;
 public final class MainActivity extends Activity {
  private WebView web;
  private boolean webReady=false;
+ private Runnable removeSystemBack;
  private android.widget.FrameLayout webFrame;
  private FileTransfer files;
  private BackupTransfer backup;
@@ -74,6 +75,7 @@ public final class MainActivity extends Activity {
     if(!state.optBoolean("ready")){showWebViewRecovery(!state.optBoolean("supported"));return;}
    }catch(Exception failed){showWebViewRecovery(false);return;}
    webReady=true;
+   if(Build.VERSION.SDK_INT>=33&&removeSystemBack==null)removeSystemBack=PlatformBack.register(this,this::onBackPressed);
    if(getResources().getConfiguration().fontScale>1.3f)view.evaluateJavascript("document.body.classList.add('large-text')",null);
    notifyOrientation();view.evaluateJavascript("window.resumeApp&&resumeApp()",null);
   });
@@ -102,7 +104,21 @@ public final class MainActivity extends Activity {
  }
  @Override public void onConfigurationChanged(Configuration configuration){super.onConfigurationChanged(configuration);notifyOrientation();if(web!=null)web.getSettings().setTextZoom(Math.round(100*configuration.fontScale));setDesktopFullscreen(desktopFullscreen);}
  @Override public void onWindowFocusChanged(boolean focused){super.onWindowFocusChanged(focused);if(desktopInput!=null)desktopInput.focusChanged(focused);if(focused&&desktopFullscreen)setDesktopFullscreen(true);}
- @Override public boolean dispatchKeyEvent(android.view.KeyEvent event){return desktopInput!=null&&desktopInput.key(event)||super.dispatchKeyEvent(event);}
+ @Override public boolean dispatchKeyEvent(android.view.KeyEvent event){
+  if(webReady&&event.getKeyCode()==android.view.KeyEvent.KEYCODE_BACK&&(event.getAction()==android.view.KeyEvent.ACTION_DOWN||event.getAction()==android.view.KeyEvent.ACTION_UP)){
+   if(event.getAction()==android.view.KeyEvent.ACTION_UP&&!event.isCanceled())onBackPressed();
+   return true;
+  }
+  return desktopInput!=null&&desktopInput.key(event)||super.dispatchKeyEvent(event);
+ }
+ private static final class PlatformBack {
+  static Runnable register(Activity activity,Runnable action){
+   android.window.OnBackInvokedDispatcher dispatcher=activity.getOnBackInvokedDispatcher();
+   android.window.OnBackInvokedCallback callback=action::run;
+   dispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,callback);
+   return ()->dispatcher.unregisterOnBackInvokedCallback(callback);
+  }
+ }
  private WebResourceResponse blocked(){return new WebResourceResponse("text/plain","UTF-8",403,"Forbidden",Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));}
  private void result(String id,JSONObject value,String error){runOnUiThread(()->{if(!isDestroyed())web.evaluateJavascript("window.nativeResult("+JSONObject.quote(id)+","+(value==null?"null":value.toString())+","+(error==null?"null":JSONObject.quote(error))+")",null);});}
  final class Bridge {
@@ -215,5 +231,5 @@ public final class MainActivity extends Activity {
  void fileProgress(JSONObject progress){runOnUiThread(()->{if(!isDestroyed())web.evaluateJavascript("window.fileTransferProgress&&fileTransferProgress("+progress.toString()+")",null);});}
  @Override protected void onActivityResult(int request,int code,Intent data){super.onActivityResult(request,code,data);if(files!=null)files.result(request,code,data);if(backup!=null)backup.result(request,code,data);if(textExport!=null)textExport.result(request,code,data);}
  @Override public void onBackPressed(){if(!webReady||web==null){super.onBackPressed();return;}web.evaluateJavascript("window.appBack&&appBack()",null);}
- @Override protected void onDestroy(){if(files!=null)files.close();if(backup!=null)backup.close();if(textExport!=null)textExport.close();pool.shutdown();if(web!=null){web.removeJavascriptInterface("Pi");web.destroy();}super.onDestroy();}
+ @Override protected void onDestroy(){if(removeSystemBack!=null){removeSystemBack.run();removeSystemBack=null;}if(files!=null)files.close();if(backup!=null)backup.close();if(textExport!=null)textExport.close();pool.shutdown();if(web!=null){web.removeJavascriptInterface("Pi");web.destroy();}super.onDestroy();}
 }

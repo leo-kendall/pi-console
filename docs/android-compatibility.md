@@ -28,7 +28,7 @@ Pi Console 面向主流 Android 手机和平板，不按小米、三星、OPPO�
 
 ## 持续集成矩阵
 
-[Android compatibility matrix](https://github.com/leo-kendall/pi-console/actions/workflows/android-compatibility.yml) 配置 API26、28、30、33、35、36，覆盖16:9、20:9，以及系统镜像提供时的角落摄像头模拟。每次运行都保留有界几何和颜色统计，不导出桌面截图、文本或按键。模拟器采用显式参考尺寸配置，读取 `wm size` 的实际生效尺寸，并要求完整界面全屏窗口与请求像素一致；系统限制导致尺寸未生效时直接失败，不能只根据场景名称认定比例已覆盖。
+[Android compatibility matrix](https://github.com/leo-kendall/pi-console/actions/workflows/android-compatibility.yml) 配置 API26、28、30、33、35、36，覆盖16:9、20:9，以及系统镜像提供时的角落摄像头模拟。API35 另启用系统手势导航，实际注入边缘返回滑动，区别于返回按键验证。每次运行都保留有界几何和颜色统计，不导出桌面截图、文本或按键。模拟器采用显式参考尺寸配置，读取 `wm size` 的实际生效尺寸，并要求完整界面全屏窗口与请求像素一致；系统限制导致尺寸未生效时直接失败，不能只根据场景名称认定比例已覆盖。
 
 旧系统镜像附带的旧 WebView 可以只验证原生更新提示，但报告必须标为 `requires-webview-update`，且 `full_ui_tested=false`；不能当作完整功能通过。较新镜像必须通过完整界面测试。报告明确区分“已配置测试”“实际执行结果”和“仍待真机验证”。
 

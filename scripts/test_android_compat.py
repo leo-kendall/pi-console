@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -130,9 +131,9 @@ def main():
         device('shell', 'wm', 'dismiss-keyguard')
         # Match AOSP CTS's immersive tests: finish the OS first-use tutorial
         # before testing app input. A focused tutorial otherwise consumes Back.
-        previous = device('shell', 'settings', 'get', 'secure', 'immersive_mode_confirmations').strip()
-        if previous not in ('null', 'confirmed'):
-            raise ValueError('Unexpected emulator immersive confirmation setting')
+        previous = device('shell', 'settings', 'get', 'secure', 'immersive_mode_confirmations').rstrip('\r\n')
+        if len(previous) > 1024 or any(c in previous for c in '\0\r\n'):
+            raise ValueError('Invalid emulator immersive confirmation setting')
         restore_tutorial = previous
         device('shell', 'settings', 'put', 'secure', 'immersive_mode_confirmations', 'confirmed')
         if device('shell', 'settings', 'get', 'secure', 'immersive_mode_confirmations').strip() != 'confirmed':
@@ -200,8 +201,10 @@ def main():
                 if restore_tutorial == 'null':
                     device('shell', 'settings', 'delete', 'secure', 'immersive_mode_confirmations')
                 else:
-                    device('shell', 'settings', 'put', 'secure', 'immersive_mode_confirmations', 'confirmed')
-                restored = device('shell', 'settings', 'get', 'secure', 'immersive_mode_confirmations').strip() == restore_tutorial
+                    # adb shell joins arguments into a command: preserve empty
+                    # and customized values with actual shell quoting.
+                    device('shell', 'settings', 'put', 'secure', 'immersive_mode_confirmations', shlex.quote(restore_tutorial))
+                restored = device('shell', 'settings', 'get', 'secure', 'immersive_mode_confirmations').rstrip('\r\n') == restore_tutorial
             except (OSError, subprocess.SubprocessError):
                 pass
             report_path = output_dir / 'report.json'

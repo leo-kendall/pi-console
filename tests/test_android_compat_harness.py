@@ -116,6 +116,26 @@ class CompatibilityHarnessTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 runner.verify_artifact(apk, 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
 
+    def test_installed_artifacts_require_exact_device_hash_and_safe_base_path(self):
+        runner = self.runner()
+        expected = 'a' * 64
+        state = {'path': 'package:/data/app/~~hash/dev.piconsole-code==/base.apk', 'hash': expected}
+        calls = []
+        def device(*args):
+            calls.append(args)
+            return state['path'] + '\n' if args[1] == 'pm' else state['hash'] + '  base.apk\n'
+        runner.verify_installed_artifact(device, 'dev.piconsole', expected)
+        state['hash'] = 'b' * 64
+        with self.assertRaises(ValueError):
+            runner.verify_installed_artifact(device, 'dev.piconsole', expected)
+        for unsafe in ('package:/data/app/unsafe;command/base.apk', 'package:/sdcard/base.apk',
+                       'package:/data/app/one/base.apk\npackage:/data/app/two/base.apk'):
+            state['path'] = unsafe
+            calls.clear()
+            with self.assertRaises(ValueError):
+                runner.verify_installed_artifact(device, 'dev.piconsole', expected)
+            self.assertEqual(len(calls), 1, 'Unsafe paths must not reach a shell checksum command')
+
 
 if __name__ == '__main__':
     unittest.main()

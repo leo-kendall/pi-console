@@ -49,3 +49,5 @@ python3 -B scripts/test_android_compat.py --run --serial emulator-5554 --label m
 ```
 
 运行器只接受 Android 模拟器，必须显式 `--run`，会重置其中的开发版 App 数据。不能把它指向正在使用的真机。开发证书只用于测试，不会访问正式签名密钥；正式 APK 请从 Releases 获取。
+
+矩阵中每台模拟器先从当前源码构建并安装一次。后续比例、摄像头和手势场景使用 `--reuse-installed`：必须保持相同的干净 Git 提交、同一模拟器，并同时核对本地 APK 和设备实际安装 APK 的 SHA-256；任一不符即失败。每个场景仍清空开发版数据并从首次启动执行，避免反复替换测试 APK 对依赖进程的干扰。

@@ -111,6 +111,26 @@ def verify_artifact(path, expected):
         raise ValueError('Missing or modified development APK')
 
 
+def clean_revision():
+    revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    status = subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=normal'], cwd=ROOT, text=True)
+    if status or not re.fullmatch(r'[a-f0-9]{40}', revision):
+        raise ValueError('Installed APK reuse requires an unchanged clean source revision')
+    return revision
+
+
+def verify_installed_artifact(device, package, expected):
+    listing = device('shell', 'pm', 'path', package).strip().splitlines()
+    if len(listing) != 1 or not listing[0].startswith('package:'):
+        raise ValueError('Expected one installed development base APK')
+    path = listing[0][8:]
+    if not re.fullmatch(r'/data/app/[A-Za-z0-9_./=~+\-]+/base\.apk', path):
+        raise ValueError('Invalid installed development APK path')
+    checksum = device('shell', 'sha256sum', shlex.quote(path)).split()
+    if not checksum or checksum[0] != expected:
+        raise ValueError('Installed development APK does not match source-bound artifact')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run', action='store_true', required=True,
@@ -121,6 +141,8 @@ def main():
                         help='Fail if an outdated WebView only exercises the native update recovery UI')
     parser.add_argument('--display-size', help='Required effective emulator size, for example 1080x2400')
     parser.add_argument('--gesture-back', action='store_true', help='Require active system gesture navigation and test actual edge swipes')
+    parser.add_argument('--reuse-installed', action='store_true',
+                        help='Reuse source-bound development APKs after verifying clean revision and installed hashes')
     args = parser.parse_args()
     if args.display_size and not re.fullmatch(r'[1-9][0-9]{2,3}x[1-9][0-9]{2,3}', args.display_size):
         parser.error('Invalid --display-size')
@@ -148,13 +170,35 @@ def main():
     try:
         require_emulator(device('shell', 'getprop', 'ro.kernel.qemu'))
         display_evidence['display_size_before_install'] = device('shell', 'wm', 'size').strip()
-        # Always fresh source builds; --reuse-debug exists only on the compile-only builder.
-        subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/build_android_compat.py')], check=True)
+        binding_path = ROOT / 'build/android-compat-installed.json'
+        revision = None
+        if args.reuse_installed:
+            binding = json.loads(binding_path.read_text())
+            revision = clean_revision()
+            if binding.get('revision') != revision or binding.get('serial') != args.serial:
+                raise ValueError('Installed development APK source/device binding changed')
+        else:
+            binding_path.unlink(missing_ok=True)
+            try:
+                revision = clean_revision()
+            except (ValueError, OSError, subprocess.SubprocessError):
+                pass  # A fresh one-off local build can also exercise edited sources.
+            subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/build_android_compat.py')], check=True)
         artifacts = json.loads((ROOT / 'build/android-compat/artifacts.json').read_text())
         for name in ('app', 'test'):
             verify_artifact(Path(artifacts[name]), artifacts[name + '_sha256'])
-            if 'Success' not in device('install', '-r', '-t', artifacts[name]):
+            if args.reuse_installed:
+                if binding.get(name + '_sha256') != artifacts[name + '_sha256']:
+                    raise ValueError('Development APK binding hash changed')
+            elif 'Success' not in device('install', '-r', '-t', artifacts[name]):
                 raise ValueError('Development APK install did not report success')
+            verify_installed_artifact(device, 'dev.piconsole' if name == 'app' else 'dev.piconsole.compat', artifacts[name + '_sha256'])
+        if revision is not None:
+            if clean_revision() != revision:
+                raise ValueError('Source revision changed during development APK preparation')
+            binding_path.write_text(json.dumps({'revision': revision, 'serial': args.serial,
+                'app_sha256': artifacts['app_sha256'], 'test_sha256': artifacts['test_sha256']}) + '\n')
+        display_evidence['reused_installed_artifacts'] = args.reuse_installed
         if 'Success' not in device('shell', 'pm', 'clear', 'dev.piconsole'):
             raise ValueError('Could not reset emulator app data for offline first launch')
         power = device('shell', 'dumpsys', 'power')

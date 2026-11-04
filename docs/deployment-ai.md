@@ -15,6 +15,8 @@ os_distribution_and_version: REQUIRED
 cpu_architecture: detect
 https_base_url: REQUIRED
 network_scope: REQUIRED  # public | lan | vpn
+alternate_https_base_url: null  # 可选：同一后端的第二条入口
+alternate_network_scope: null
 proxy_type_and_config_path: discover_or_ask
 certificate_method: discover_or_ask
 phone_android_and_webview: discover_or_ask
@@ -122,6 +124,16 @@ curl --fail --show-error https://console.example.test/pi-console/api/connection
 ```
 
 预期 HTTP 200，分别为 `status=ok` 与 `app=pi-console, protocol=1`。不能跟随到登录网页后当作 JSON 成功，不能增加证书忽略参数。公网代理若增加认证门，必须与原生客户端实际支持的连接方式匹配并验收，不能只验证浏览器登录。
+
+**已要求 Tailscale／公网双入口时：**保留当前可用入口，核对两条代理都指向同一后端。发现 Tailscale 设备域名、已有 Serve/Funnel 配置及端口占用后，可在一个空闲的专用 HTTPS 端口提供第二入口；不要覆盖其他服务的 443，也不要用 `tailscale serve reset` 清空配置。以下仅是后端实际位于 `127.0.0.1:18765`、8443 空闲时的示例：
+
+```sh
+tailscale serve --bg --https=8443 http://127.0.0.1:18765
+```
+
+此例在 Tailscale 域名的 8443 根路径提供后端，App 的第二基础 URL 是 `https://YOUR_DEVICE.YOUR_TAILNET.ts.net:8443`，无需追加 `/pi-console`。Serve 仅用于 tailnet，不为此启用公网 Funnel。若命令要求账户首次启用 Serve／HTTPS，让账户所有者完成官方启用页；期间可继续检查现有入口，不能声称第二入口已可用。见 [Tailscale Serve 文档](https://tailscale.com/docs/reference/tailscale-cli/serve)。
+
+从对应网络用正常 TLS 校验验证第二入口的 `/health`、`/api/connection` 和未鉴权 `/api/status`，分别预期 200、200、401；同时复查原公网入口。保存原代理配置，仅撤销自己新建且目标仍匹配的专用入口。让用户在 App“我的服务器”添加第二配置，各入口独立完成首次配对，之后手动切换；不导出、复制或在两个配置间挪用加密凭证。切换时桌面会断开、持续监控会停止。不要把另一个配置的首次配对说成每次切换都要重新配对。
 
 ### D. 安装 App、配对和只读验收
 
